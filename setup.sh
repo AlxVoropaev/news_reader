@@ -69,35 +69,11 @@ setup_virtualenv() {
         exit 1
     fi
 
-    # Check if virtualenvwrapper is installed
-    if ! command -v mkvirtualenv &> /dev/null; then
-        echo -e "${YELLOW}⚠️  virtualenvwrapper not found. Installing...${NC}"
-        
-        # Try to install virtualenvwrapper
-        if command -v pip3 &> /dev/null; then
-            pip3 install virtualenvwrapper
-        elif command -v pip &> /dev/null; then
-            pip install virtualenvwrapper
-        else
-            echo -e "${RED}❌ pip not found. Please install pip first.${NC}"
-            exit 1
-        fi
-        
-        echo -e "${YELLOW}📝 Please add these lines to your ~/.bashrc or ~/.zshrc:${NC}"
-        echo "export WORKON_HOME=\$HOME/.virtualenvs"
-        echo "export PROJECT_HOME=\$HOME/Devel"
-        echo "source /usr/local/bin/virtualenvwrapper.sh"
-        echo ""
-        echo -e "${YELLOW}Then run: source ~/.bashrc (or ~/.zshrc)${NC}"
-        echo -e "${YELLOW}After that, run this script again.${NC}"
-        exit 1
-    fi
-
-    # Create virtual environment
-    ENV_NAME="news-reader"
-    echo -e "${YELLOW}🔨 Creating virtual environment '${ENV_NAME}'...${NC}"
+    # Create virtual environment using built-in venv module
+    ENV_DIR=".venv"
+    echo -e "${YELLOW}🔨 Creating virtual environment '${ENV_DIR}'...${NC}"
     
-    if mkvirtualenv -p python3 "$ENV_NAME"; then
+    if python3 -m venv "$ENV_DIR"; then
         echo -e "${GREEN}✅ Virtual environment created successfully${NC}"
     else
         echo -e "${RED}❌ Failed to create virtual environment${NC}"
@@ -106,21 +82,20 @@ setup_virtualenv() {
 
     # Activate virtual environment and install dependencies
     echo -e "${YELLOW}📦 Installing Python dependencies...${NC}"
-    source "$WORKON_HOME/$ENV_NAME/bin/activate"
+    source "$ENV_DIR/bin/activate"
     pip install -r requirements.txt
 
     echo -e "${GREEN}✅ Virtual environment setup completed!${NC}"
     echo ""
     echo -e "${BLUE}📋 Next steps (Virtual Environment):${NC}"
     echo "1. Edit .env file with your Telegram API credentials"
-    echo "2. Activate the environment: workon $ENV_NAME"
-    echo "3. Run: python news_reader/commander.py connect"
-    echo "4. Follow the authorization process"
+    echo "2. Use the helper script: ./run_venv.sh connect"
+    echo "3. Follow the authorization process"
     echo ""
-    echo -e "${YELLOW}🔍 To start monitoring: python news_reader/monitor.py${NC}"
+    echo -e "${YELLOW}🔍 To start monitoring: ./run_venv.sh monitor${NC}"
     echo ""
-    echo -e "${BLUE}💡 Remember to activate the environment before using:${NC}"
-    echo -e "${YELLOW}   workon $ENV_NAME${NC}"
+    echo -e "${BLUE}💡 Or manually activate the environment:${NC}"
+    echo -e "${YELLOW}   source $ENV_DIR/bin/activate${NC}"
 }
 
 # Main menu

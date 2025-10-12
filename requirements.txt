@@ -3,4 +3,4 @@ python-dotenv==1.0.0
 click==8.1.7
 colorama==0.4.6
 asyncio-mqtt==0.16.1
-pysondb==2.0.1
+pysondb==1.6.7

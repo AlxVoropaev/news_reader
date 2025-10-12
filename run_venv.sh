@@ -2,25 +2,24 @@
 
 # Helper script to run News Reader commands in virtual environment
 
-ENV_NAME="news-reader"
-
-# Check if virtualenvwrapper is available
-if ! command -v workon &> /dev/null; then
-    echo "❌ virtualenvwrapper not found. Please install it first."
-    echo "Run: pip3 install virtualenvwrapper"
-    exit 1
-fi
+ENV_DIR=".venv"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Check if virtual environment exists
-if [ ! -d "$WORKON_HOME/$ENV_NAME" ]; then
-    echo "❌ Virtual environment '$ENV_NAME' not found."
-    echo "Please run ./setup.sh and choose option 2 to create it."
-    exit 1
+if [ ! -d "$SCRIPT_DIR/$ENV_DIR" ]; then
+    echo "❌ Virtual environment '$ENV_DIR' not found."
+    echo "Creating virtual environment..."
+    cd "$SCRIPT_DIR"
+    python3 -m venv "$ENV_DIR"
+    echo "✅ Virtual environment created."
+    echo "Installing requirements..."
+    source "$ENV_DIR/bin/activate"
+    pip install -r requirements.txt
+    echo "✅ Requirements installed."
+else
+    echo "🐍 Activating virtual environment '$ENV_DIR'..."
+    source "$SCRIPT_DIR/$ENV_DIR/bin/activate"
 fi
-
-# Activate virtual environment and run the command
-echo "🐍 Activating virtual environment '$ENV_NAME'..."
-source "$WORKON_HOME/$ENV_NAME/bin/activate"
 
 if [ $# -eq 0 ]; then
     echo "📋 Available commands:"
