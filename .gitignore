@@ -133,6 +133,12 @@ dmypy.json
 *.session-journal
 sessions/
 
+# Database files
+data/*.json
+!data/.gitkeep
+monitoring_config*.json
+monitored_channels.json
+
 # Logs
 logs/
 *.log

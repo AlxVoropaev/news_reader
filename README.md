@@ -9,6 +9,8 @@ A special CLI Telegram client built with Telethon library for reading news and m
 - 📱 **Telegram Connection**: Secure connection and authorization to Telegram
 - 🐳 **Docker Support**: Containerized deployment with Docker Compose
 - 📡 **Real-time Monitoring**: Optional monitoring service for incoming messages
+- 📺 **Channel Management**: List and select specific channels for monitoring
+- 🗄️ **Local Database**: pysonDB-based local JSON database for storing configuration
 - 🎨 **Colored Output**: Beautiful colored terminal output
 
 ## Prerequisites
@@ -124,16 +126,28 @@ Follow the prompts to enter your phone number, verification code, and 2FA passwo
 
 #### Docker Commands:
 ```bash
-# Connect and authorize (only available command)
+# Connect and authorize
 docker-compose run --rm news-reader connect
+
+# List all your channels
+docker-compose run --rm news-reader channels
+
+# Setup channel monitoring (select which channels to monitor)
+docker-compose run --rm news-reader setup-monitoring
 ```
 
 #### Virtual Environment Commands:
 
 **Option A: Using the helper script (recommended):**
 ```bash
-# Connect and authorize (only available command)
+# Connect and authorize
 ./run_venv.sh connect
+
+# List all your channels
+./run_venv.sh channels
+
+# Setup channel monitoring (select which channels to monitor)
+./run_venv.sh setup-monitoring
 ```
 
 **Option B: Manual activation:**
@@ -141,11 +155,21 @@ docker-compose run --rm news-reader connect
 # First, activate the environment
 workon news-reader
 
-# Connect and authorize (only available command)
+# Connect and authorize
 python news_reader.py connect
+
+# List all your channels
+python news_reader.py channels
+
+# Setup channel monitoring (select which channels to monitor)
+python news_reader.py setup-monitoring
 ```
 
 ### Real-time Monitoring
+
+**Note:** Before starting monitoring, make sure to run `setup-monitoring` to select which channels you want to monitor. The monitor will only show messages from your selected channels.
+
+**Database Storage:** Channel configurations are stored in the `data/` directory using pysonDB. This directory is automatically created and the database files are stored locally for easy backup.
 
 #### Docker Monitoring:
 ```bash

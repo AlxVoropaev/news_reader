@@ -16,6 +16,7 @@ services:
       - SESSION_NAME=${SESSION_NAME:-news_reader_session}
     volumes:
       - ./sessions:/app/sessions
+      - ./data:/app/data
       - ./.env:/app/.env:ro
     stdin_open: true
     tty: true
@@ -39,6 +40,7 @@ services:
       - SESSION_NAME=${SESSION_NAME:-news_reader_monitor_session}
     volumes:
       - ./sessions:/app/sessions
+      - ./data:/app/data
       - ./.env:/app/.env:ro
     command: ["python", "monitor.py"]
     restart: unless-stopped
