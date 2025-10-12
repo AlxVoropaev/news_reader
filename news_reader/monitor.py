@@ -7,7 +7,7 @@ import asyncio
 import logging
 from datetime import datetime
 from telethon import TelegramClient, events
-from config import Config
+from news_reader.config import Config
 from colorama import init, Fore, Style
 
 # Initialize colorama
@@ -30,13 +30,13 @@ class TelegramMonitor:
     def load_monitored_channels(self):
         """Load monitored channels from database"""
         try:
-            from db_client import get_db_client
+            from news_reader.db_client import get_db_client
             
             db_client = get_db_client()
             channels = db_client.get_monitored_channels()
             
             if not channels:
-                logger.warning("⚠️ No monitored channels configuration found. Run 'python news_reader.py setup-monitoring' first.")
+                logger.warning("⚠️ No monitored channels configuration found. Run 'python news_reader/commander.py setup-monitoring' first.")
                 return []
             
             logger.info(f"📡 Loaded {len(channels)} monitored channels from database")
@@ -55,7 +55,7 @@ class TelegramMonitor:
             self.monitored_channels = self.load_monitored_channels()
             if not self.monitored_channels:
                 print(f"{Fore.YELLOW}⚠️ No channels configured for monitoring.")
-                print(f"{Fore.CYAN}💡 Run 'python news_reader.py setup-monitoring' to select channels.")
+                print(f"{Fore.CYAN}💡 Run 'python news_reader/commander.py setup-monitoring' to select channels.")
                 return False
             
             self.client = TelegramClient(

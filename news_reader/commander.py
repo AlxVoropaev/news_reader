@@ -6,7 +6,7 @@ from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from telethon.network import MTProtoSender
 from telethon.network.connection import ConnectionTcpFull
-from config import Config
+from news_reader.config import Config
 import click
 from colorama import init, Fore, Style
 
@@ -186,7 +186,7 @@ class NewsReader:
     async def _save_monitored_channels(self, channel_ids):
         """Save monitored channels using database client"""
         try:
-            from db_client import get_db_client
+            from news_reader.db_client import get_db_client
             
             db_client = get_db_client()
             
@@ -202,7 +202,7 @@ class NewsReader:
     async def _save_channel_info(self, channels):
         """Save channel information to database"""
         try:
-            from db_client import get_db_client
+            from news_reader.db_client import get_db_client
             
             db_client = get_db_client()
             

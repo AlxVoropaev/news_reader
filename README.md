@@ -115,7 +115,7 @@ docker-compose run --rm news-reader connect
 workon news-reader
 
 # Connect and authorize for the first time
-python news_reader.py connect
+python lib/news_reader.py connect
 ```
 
 Follow the prompts to enter your phone number, verification code, and 2FA password if enabled.
@@ -156,13 +156,13 @@ docker-compose run --rm news-reader setup-monitoring
 workon news-reader
 
 # Connect and authorize
-python news_reader.py connect
+python lib/news_reader.py connect
 
 # List all your channels
-python news_reader.py channels
+python lib/news_reader.py channels
 
 # Setup channel monitoring (select which channels to monitor)
-python news_reader.py setup-monitoring
+python lib/news_reader.py setup-monitoring
 ```
 
 ### Real-time Monitoring
@@ -190,7 +190,7 @@ docker-compose logs -f news-reader-monitor
 
 # Or manually
 workon news-reader
-python monitor.py
+python lib/monitor.py
 ```
 
 ### Interactive Mode
@@ -200,7 +200,7 @@ python monitor.py
 docker-compose run --rm news-reader bash
 
 # Then use the CLI directly
-python news_reader.py connect
+python lib/news_reader.py connect
 ```
 
 ## Project Structure

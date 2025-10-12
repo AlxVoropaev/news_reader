@@ -32,10 +32,10 @@ if [ $# -eq 0 ]; then
 else
     if [ "$1" = "monitor" ]; then
         echo "🔍 Starting monitoring service..."
-        python monitor.py
+        python news_reader/monitor.py
     elif [ "$1" = "connect" ]; then
-        echo "🚀 Running: python news_reader.py connect"
-        python news_reader.py connect
+        echo "🚀 Running: python news_reader/commander.py connect"
+        python news_reader/commander.py connect
     else
         echo "❌ Unknown command: $1"
         echo "Available commands: connect, monitor"
