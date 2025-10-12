@@ -22,22 +22,19 @@ else
 fi
 
 if [ $# -eq 0 ]; then
-    echo "📋 Available commands:"
-    echo "  connect                    - Connect and authorize"
-    echo "  monitor                    - Start monitoring service"
-    echo ""
-    echo "Usage: $0 <command> [arguments]"
-    echo "Example: $0 connect"
+    echo "🚀 Starting News Reader Application..."
+    python news_reader/main.py
 else
-    if [ "$1" = "monitor" ]; then
-        echo "🔍 Starting monitoring service..."
-        python news_reader/monitor.py
-    elif [ "$1" = "connect" ]; then
-        echo "🚀 Running: python news_reader/commander.py connect"
-        python news_reader/commander.py connect
+    if [ "$1" = "app" ] || [ "$1" = "start" ]; then
+        echo "🚀 Starting News Reader Application..."
+        python news_reader/main.py
     else
         echo "❌ Unknown command: $1"
-        echo "Available commands: connect, monitor"
+        echo "Available commands:"
+        echo "  app/start (or no arguments) - Start the unified News Reader application"
+        echo ""
+        echo "Usage: $0 [app|start]"
+        echo "Example: $0 app"
         exit 1
     fi
 fi

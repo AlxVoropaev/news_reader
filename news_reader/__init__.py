@@ -1,7 +1,7 @@
 """
 News Reader Library
 
-This package contains the core modules for the Telegram News Reader application.
+Unified Telegram client application with real-time monitoring and interactive CLI.
 """
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"

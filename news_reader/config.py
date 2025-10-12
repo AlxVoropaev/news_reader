@@ -15,8 +15,7 @@ class Config:
     MTPROTO_SERVER_PORT = int(os.getenv('MTPROTO_SERVER_PORT', '443'))
     MTPROTO_PUBLIC_KEY = os.getenv('MTPROTO_PUBLIC_KEY', '')
     
-    # Session settings
-    SESSION_NAME = os.getenv('SESSION_NAME', 'news_reader_session')
+    # Session settings - using StringSession (in-memory only, no disk storage)
     
     @classmethod
     def validate(cls):

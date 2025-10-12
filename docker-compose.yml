@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: news-reader-client
+    container_name: news-reader-app
     environment:
       - API_ID=${API_ID}
       - API_HASH=${API_HASH}
@@ -13,41 +13,16 @@ services:
       - MTPROTO_SERVER_IP=${MTPROTO_SERVER_IP:-149.154.167.50}
       - MTPROTO_SERVER_PORT=${MTPROTO_SERVER_PORT:-443}
       - MTPROTO_PUBLIC_KEY=${MTPROTO_PUBLIC_KEY}
-      - SESSION_NAME=${SESSION_NAME:-news_reader_session}
     volumes:
-      - ./sessions:/app/sessions
       - ./data:/app/data
+      - ./logs:/app/logs
       - ./.env:/app/.env:ro
     stdin_open: true
     tty: true
     restart: unless-stopped
+    command: ["python", "news_reader/main.py"]
     networks:
       - news-reader-network
-
-  # Optional: Add a monitoring service
-  news-reader-monitor:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: news-reader-monitor
-    environment:
-      - API_ID=${API_ID}
-      - API_HASH=${API_HASH}
-      - PHONE_NUMBER=${PHONE_NUMBER}
-      - MTPROTO_SERVER_IP=${MTPROTO_SERVER_IP:-149.154.167.50}
-      - MTPROTO_SERVER_PORT=${MTPROTO_SERVER_PORT:-443}
-      - MTPROTO_PUBLIC_KEY=${MTPROTO_PUBLIC_KEY}
-      - SESSION_NAME=${SESSION_NAME:-news_reader_monitor_session}
-    volumes:
-      - ./sessions:/app/sessions
-      - ./data:/app/data
-      - ./.env:/app/.env:ro
-    command: ["python", "monitor.py"]
-    restart: unless-stopped
-    networks:
-      - news-reader-network
-    depends_on:
-      - news-reader
 
 networks:
   news-reader-network:

@@ -1,17 +1,19 @@
 # News Reader
 
-A special CLI Telegram client built with Telethon library for reading news and messages, featuring MTProto server configuration and Docker Compose deployment.
+A unified Telegram client application built with Telethon library for reading news and messages, featuring real-time monitoring, interactive CLI, and MTProto server configuration.
 
 ## Features
 
-- 🚀 **CLI Interface**: Simple command-line interface for Telegram connection
-- 🔐 **MTProto Support**: Direct MTProto server IP address and public key configuration
+- 🚀 **Unified Application**: Single app with multiple async tasks for monitoring and CLI interaction
+- 🔐 **Secure Session Management**: In-memory session storage only (no disk storage) with user login at startup
+- 💬 **Interactive CLI**: Real-time command interface while monitoring channels
+- 📡 **Real-time Monitoring**: Continuous monitoring of configured Telegram channels
 - 📱 **Telegram Connection**: Secure connection and authorization to Telegram
 - 🐳 **Docker Support**: Containerized deployment with Docker Compose
-- 📡 **Real-time Monitoring**: Optional monitoring service for incoming messages
 - 📺 **Channel Management**: List and select specific channels for monitoring
 - 🗄️ **Local Database**: pysonDB-based local JSON database for storing configuration
 - 🎨 **Colored Output**: Beautiful colored terminal output
+- ⚡ **Async Architecture**: Efficient async/await based architecture
 
 ## Prerequisites
 
@@ -97,110 +99,132 @@ MNoFk1NHpJ/hpQXn+F8jmTfFrQGx8+9J8S4tEqYlNYIlnHtqMNoFk1NHpJ/hpQXn
 QIDAQAB
 -----END RSA PUBLIC KEY-----
 
-# Session settings
-SESSION_NAME=news_reader_session
+# Note: Session is stored in memory only for security (no SESSION_NAME needed)
 ```
 
-### 3. First Time Authorization
+### 3. Running the Application
+
+The refactored News Reader is now a unified application that handles both monitoring and CLI interaction in a single process.
 
 #### For Docker Setup:
 ```bash
-# Connect and authorize for the first time
-docker-compose run --rm news-reader connect
+# Start the unified News Reader application
+docker-compose up news-reader
+
+# Or run interactively
+docker-compose run --rm news-reader
 ```
 
 #### For Virtual Environment Setup:
 ```bash
-# Activate the virtual environment
-workon news-reader
+# Start the application (will create/activate venv automatically)
+./run_venv.sh
 
-# Connect and authorize for the first time
-python news_reader/commander.py connect
+# Or manually activate and run
+workon news-reader
+python news_reader/main.py
 ```
 
-Follow the prompts to enter your phone number, verification code, and 2FA password if enabled.
+The application will:
+1. Prompt for authorization on first run (phone number, verification code, 2FA if enabled)
+2. Load your session data into memory
+3. Start monitoring configured channels in the background
+4. Provide an interactive CLI for commands
 
 ## Usage
 
-### Basic Commands
+### Interactive Commands
 
-#### Docker Commands:
-```bash
-# Connect and authorize
-docker-compose run --rm news-reader connect
+Once the application is running, you can use the following commands in the interactive CLI:
 
-# List all your channels
-docker-compose run --rm news-reader channels
-
-# Setup channel monitoring (select which channels to monitor)
-docker-compose run --rm news-reader setup-monitoring
+```
+help           - Show available commands
+status         - Show application status (user info, connection status, etc.)
+channels       - List all your channels (shows which ones are monitored)
+monitor        - Show current monitoring status
+monitor setup  - Setup/change channel monitoring configuration
+reload         - Reload configuration from database
+quit/exit      - Exit the application
 ```
 
-#### Virtual Environment Commands:
+### Example Session
 
-**Option A: Using the helper script (recommended):**
 ```bash
-# Connect and authorize
-./run_venv.sh connect
+# Start the application
+./run_venv.sh
 
-# List all your channels
-./run_venv.sh channels
+# The app will start and show:
+🚀 Starting News Reader Application...
+🔐 Authorization required...
+📱 Code sent to +1234567890
+Enter the code you received: 12345
+✅ Successfully authorized!
+✅ Application started successfully!
+📱 User: John Doe
+📺 Monitoring 3 channels
+📡 Monitoring started for 3 channels
+💬 Interactive CLI started. Type 'help' for available commands.
 
-# Setup channel monitoring (select which channels to monitor)
-./run_venv.sh setup-monitoring
-```
+# Now you can use interactive commands:
+> help
+📚 Available Commands:
+  help           - Show this help message
+  status         - Show application status
+  channels       - List all your channels
+  monitor        - Show monitoring status
+  monitor setup  - Setup channel monitoring
+  reload         - Reload configuration
+  quit/exit      - Exit the application
 
-**Option B: Manual activation:**
-```bash
-# First, activate the environment
-workon news-reader
+> channels
+📡 Fetching your channels...
+📺 Your channels:
+ID              Title
+------------------------------------------------------------
+✅ -1001234567890 Tech News Channel
+✅ -1001234567891 Crypto Updates
+   -1001234567892 General Chat
 
-# Connect and authorize
-python news_reader/commander.py connect
+> monitor setup
+🔧 Select channels to monitor:
+Enter channel IDs separated by commas (or 'all' for all channels):
+> -1001234567890,-1001234567891
+✅ Selected 2 channels:
+  - Tech News Channel
+  - Crypto Updates
+💾 Saved monitoring configuration
 
-# List all your channels
-python news_reader/commander.py channels
-
-# Setup channel monitoring (select which channels to monitor)
-python news_reader/commander.py setup-monitoring
+# Meanwhile, new messages appear in real-time:
+📨 [2025-10-12 15:30:45] New message
+👤 From: NewsBot
+💬 Chat: Tech News Channel (-1001234567890)
+📝 Message: Breaking: New AI breakthrough announced...
 ```
 
 ### Real-time Monitoring
 
-**Note:** Before starting monitoring, make sure to run `setup-monitoring` to select which channels you want to monitor. The monitor will only show messages from your selected channels.
+The unified application automatically starts monitoring configured channels in the background. Messages from monitored channels will appear in real-time while you use the interactive CLI.
 
 **Database Storage:** Channel configurations are stored in the `data/` directory using pysonDB. This directory is automatically created and the database files are stored locally for easy backup.
 
-#### Docker Monitoring:
-```bash
-# Start monitoring service
-docker-compose up news-reader-monitor
+**Key Features:**
+- ✅ **Simultaneous Operation**: Monitor channels while using CLI commands
+- 📱 **Real-time Updates**: New messages appear immediately
+- 🎯 **Filtered Monitoring**: Only shows messages from your selected channels
+- 💾 **Persistent Configuration**: Channel settings saved to local database
+- 🔄 **Dynamic Reconfiguration**: Change monitored channels without restarting
 
-# Or run in background
-docker-compose up -d news-reader-monitor
+### Docker Usage
+
+```bash
+# Start the application with Docker
+docker-compose up news-reader
+
+# Or run interactively
+docker-compose run --rm news-reader
 
 # View logs
-docker-compose logs -f news-reader-monitor
-```
-
-#### Virtual Environment Monitoring:
-```bash
-# Using helper script
-./run_venv.sh monitor
-
-# Or manually
-workon news-reader
-python news_reader/monitor.py
-```
-
-### Interactive Mode
-
-```bash
-# Run the container interactively
-docker-compose run --rm news-reader bash
-
-# Then use the CLI directly
-python news_reader/commander.py connect
+docker-compose logs -f news-reader
 ```
 
 ## Project Structure
@@ -209,11 +233,14 @@ python news_reader/commander.py connect
 news_reader/
 ├── news_reader/          # Main Python package
 │   ├── __init__.py       # Package initialization
-│   ├── commander.py      # Main CLI client (formerly news_reader.py)
-│   ├── monitor.py        # Real-time monitoring service
+│   ├── app.py            # Main application controller
+│   ├── main.py           # Main entry point
+│   ├── monitoring_task.py # Telegram message monitoring task
+│   ├── cli_task.py       # Interactive CLI task
 │   ├── config.py         # Configuration management
 │   └── db_client.py      # Database client
-├── data/                 # Data directory
+├── data/                 # Data directory (database storage)
+├── logs/                 # Log files directory
 ├── requirements.txt      # Python dependencies
 ├── Dockerfile           # Docker container definition
 ├── docker-compose.yml   # Docker Compose configuration
@@ -222,6 +249,28 @@ news_reader/
 ├── .env.example         # Environment variables template
 └── README.md            # This file
 ```
+
+### Architecture Changes
+
+The refactored application features modular design with separate classes:
+
+- **`app.py`**: Main application controller
+  - Telegram client initialization and authentication
+  - Session management in memory
+  - Task coordination and lifecycle management
+  - Graceful shutdown handling
+
+- **`monitoring_task.py`**: Telegram message monitoring
+  - Event handlers for new/edited messages
+  - Channel filtering and message display
+  - Background monitoring loop
+
+- **`cli_task.py`**: Interactive command-line interface
+  - Command processing and user interaction
+  - Channel management and configuration
+  - Status reporting and help system
+
+- **`main.py`**: Simple entry point launcher
 
 ## Configuration
 
@@ -302,9 +351,10 @@ environment:
 ## Security Notes
 
 - Never commit your `.env` file to version control
-- Session files contain sensitive authentication data
+- **Sessions are stored in memory only** - no sensitive data written to disk
 - Use strong 2FA passwords
 - Consider using a dedicated API application for this client
+- Application requires re-authentication on each restart (security feature)
 
 ## Contributing
 

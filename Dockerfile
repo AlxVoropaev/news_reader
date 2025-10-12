@@ -18,8 +18,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create directory for session files
-RUN mkdir -p /app/sessions
+# Create directories for data and logs (no session files - using in-memory sessions)
+RUN mkdir -p /app/data /app/logs
 
 # Set environment variables
 ENV PYTHONPATH=/app
@@ -30,5 +30,5 @@ RUN useradd -m -u 1000 telegram && \
     chown -R telegram:telegram /app
 USER telegram
 
-# Default command
-CMD ["python", "news_reader.py", "--help"]
+# Default command - run the unified app
+CMD ["python", "news_reader/main.py"]
