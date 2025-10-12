@@ -20,7 +20,7 @@ mkdir -p logs
 # Check if .env file exists
 if [ ! -f ".env" ]; then
     echo -e "${YELLOW}📝 Creating .env file from template...${NC}"
-    cp env.example .env
+    cp .env.example .env
     echo -e "${YELLOW}⚠️  Please edit .env file with your Telegram API credentials!${NC}"
     echo -e "   You can get them from https://my.telegram.org/apps"
 else

@@ -219,7 +219,7 @@ news_reader/
 ├── docker-compose.yml   # Docker Compose configuration
 ├── setup.sh             # Interactive setup script (Docker + virtualenv)
 ├── run_venv.sh          # Helper script for virtual environment
-├── env.example          # Environment variables template
+├── .env.example         # Environment variables template
 └── README.md            # This file
 ```
 
