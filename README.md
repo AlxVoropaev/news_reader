@@ -115,7 +115,7 @@ docker-compose run --rm news-reader connect
 workon news-reader
 
 # Connect and authorize for the first time
-python lib/news_reader.py connect
+python news_reader/commander.py connect
 ```
 
 Follow the prompts to enter your phone number, verification code, and 2FA password if enabled.
@@ -156,13 +156,13 @@ docker-compose run --rm news-reader setup-monitoring
 workon news-reader
 
 # Connect and authorize
-python lib/news_reader.py connect
+python news_reader/commander.py connect
 
 # List all your channels
-python lib/news_reader.py channels
+python news_reader/commander.py channels
 
 # Setup channel monitoring (select which channels to monitor)
-python lib/news_reader.py setup-monitoring
+python news_reader/commander.py setup-monitoring
 ```
 
 ### Real-time Monitoring
@@ -190,7 +190,7 @@ docker-compose logs -f news-reader-monitor
 
 # Or manually
 workon news-reader
-python lib/monitor.py
+python news_reader/monitor.py
 ```
 
 ### Interactive Mode
@@ -200,25 +200,27 @@ python lib/monitor.py
 docker-compose run --rm news-reader bash
 
 # Then use the CLI directly
-python lib/news_reader.py connect
+python news_reader/commander.py connect
 ```
 
 ## Project Structure
 
 ```
 news_reader/
-├── news_reader.py        # Main CLI client
-├── monitor.py             # Real-time monitoring service
-├── config.py              # Configuration management
-├── requirements.txt       # Python dependencies
-├── Dockerfile            # Docker container definition
-├── docker-compose.yml    # Docker Compose configuration
-├── setup.sh              # Interactive setup script (Docker + virtualenv)
-├── run_venv.sh           # Helper script for virtual environment
-├── env.example           # Environment variables template
-├── .dockerignore         # Docker ignore rules
-├── README.md             # This file
-└── sessions/             # Session files directory
+├── news_reader/          # Main Python package
+│   ├── __init__.py       # Package initialization
+│   ├── commander.py      # Main CLI client (formerly news_reader.py)
+│   ├── monitor.py        # Real-time monitoring service
+│   ├── config.py         # Configuration management
+│   └── db_client.py      # Database client
+├── data/                 # Data directory
+├── requirements.txt      # Python dependencies
+├── Dockerfile           # Docker container definition
+├── docker-compose.yml   # Docker Compose configuration
+├── setup.sh             # Interactive setup script (Docker + virtualenv)
+├── run_venv.sh          # Helper script for virtual environment
+├── env.example          # Environment variables template
+└── README.md            # This file
 ```
 
 ## Configuration
