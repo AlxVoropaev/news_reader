@@ -3,3 +3,4 @@ python-dotenv==1.0.0
 colorama==0.4.6
 tinydb==4.8.0
 aioconsole==0.7.0
+textual==0.41.0

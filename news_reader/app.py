@@ -19,7 +19,7 @@ from telethon.errors import SessionPasswordNeededError
 from news_reader.config import Config
 from news_reader.db_client import get_db_client
 from news_reader.monitoring_task import MonitoringTask
-from news_reader.cli_task import CLITask
+from news_reader.textual_cli_task import TextualCLITask
 from colorama import init, Fore, Style
 
 # Initialize colorama for colored output
@@ -67,7 +67,7 @@ class NewsReaderApp:
         self.monitoring_task: Optional[asyncio.Task] = None
         self.cli_task: Optional[asyncio.Task] = None
         self.monitoring_task_instance: Optional[MonitoringTask] = None
-        self.cli_task_instance: Optional[CLITask] = None
+        self.cli_task_instance: Optional[TextualCLITask] = None
         self.monitored_channels: List[int] = []
         self.session_data: Dict[str, Any] = {}
         self.cached_channels: List[Dict[str, Any]] = []
@@ -233,7 +233,7 @@ class NewsReaderApp:
         
         # Create task instances
         self.monitoring_task_instance = MonitoringTask(self.client, self.monitored_channels)
-        self.cli_task_instance = CLITask(self)
+        self.cli_task_instance = TextualCLITask(self)
         
         # Start background tasks
         self.monitoring_task = asyncio.create_task(self.monitoring_task_instance.start())
