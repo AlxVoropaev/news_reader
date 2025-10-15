@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Database Client - Client for interacting with pysonDB
+Database Client - Client for interacting with TinyDB
 """
 
 import logging
@@ -10,11 +10,11 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-class PysonDBClient:
-    """Database client using pysonDB for local JSON database"""
+class TinyDBClient:
+    """Database client using TinyDB for local JSON database"""
     
     def __init__(self, db_path: str = None):
-        """Initialize pysonDB client"""
+        """Initialize TinyDB client"""
         if db_path is None:
             # Use data directory if it exists, otherwise current directory
             if os.path.exists('data'):
@@ -25,13 +25,14 @@ class PysonDBClient:
         self.db_path = db_path
         self._ensure_db_dir()
         
-        # Initialize pysonDB
+        # Initialize TinyDB
         try:
-            from pysondb import db
-            self.db = db.getDb(self.db_path)
-            logger.info(f"Initialized pysonDB at: {self.db_path}")
+            from tinydb import TinyDB, Query
+            self.db = TinyDB(self.db_path)
+            self.Query = Query
+            logger.info(f"Initialized TinyDB at: {self.db_path}")
         except Exception as e:
-            logger.error(f"Failed to initialize pysonDB: {e}")
+            logger.error(f"Failed to initialize TinyDB: {e}")
             raise
     
     def _ensure_db_dir(self):
@@ -44,7 +45,7 @@ class PysonDBClient:
         """Check if database is accessible"""
         try:
             # Try to read from database
-            self.db.getAll()
+            self.db.all()
             return True
         except Exception as e:
             logger.error(f"Health check failed: {e}")
@@ -54,7 +55,7 @@ class PysonDBClient:
         """Get list of monitored channel IDs"""
         try:
             # Look for monitoring configuration
-            configs = self.db.getByQuery({"type": "monitoring_channels"})
+            configs = self.db.search(self.Query.type == "monitoring_channels")
             
             if configs:
                 # Get the most recent configuration
@@ -74,9 +75,7 @@ class PysonDBClient:
         """Set monitored channel IDs"""
         try:
             # Remove existing monitoring configurations
-            existing_configs = self.db.getByQuery({"type": "monitoring_channels"})
-            for config in existing_configs:
-                self.db.deleteById(config['id'])
+            self.db.remove(self.Query.type == "monitoring_channels")
             
             # Add new configuration
             config_data = {
@@ -86,7 +85,7 @@ class PysonDBClient:
                 "updated_by": user
             }
             
-            self.db.add(config_data)
+            self.db.insert(config_data)
             logger.info(f"Successfully saved {len(channels)} monitored channels to database")
             return True
             
@@ -98,9 +97,7 @@ class PysonDBClient:
         """Clear all monitored channels"""
         try:
             # Remove all monitoring configurations
-            existing_configs = self.db.getByQuery({"type": "monitoring_channels"})
-            for config in existing_configs:
-                self.db.deleteById(config['id'])
+            self.db.remove(self.Query.type == "monitoring_channels")
             
             logger.info("Successfully cleared all monitored channels from database")
             return True
@@ -112,7 +109,7 @@ class PysonDBClient:
     def get_all_config(self) -> Dict[str, Any]:
         """Get all configuration data"""
         try:
-            all_data = self.db.getAll()
+            all_data = self.db.all()
             return {"configurations": all_data}
         except Exception as e:
             logger.error(f"Failed to get all config: {e}")
@@ -122,9 +119,7 @@ class PysonDBClient:
         """Add or update channel information"""
         try:
             # Remove existing channel info if it exists
-            existing_info = self.db.getByQuery({"type": "channel_info", "channel_id": channel_id})
-            for info in existing_info:
-                self.db.deleteById(info['id'])
+            self.db.remove((self.Query.type == "channel_info") & (self.Query.channel_id == channel_id))
             
             # Add new channel info
             channel_data = {
@@ -135,7 +130,7 @@ class PysonDBClient:
                 "updated_at": datetime.now().isoformat()
             }
             
-            self.db.add(channel_data)
+            self.db.insert(channel_data)
             logger.info(f"Added channel info for: {channel_title} ({channel_id})")
             return True
             
@@ -146,7 +141,7 @@ class PysonDBClient:
     def get_channel_info(self, channel_id: int) -> Dict[str, Any]:
         """Get channel information by ID"""
         try:
-            channel_info = self.db.getByQuery({"type": "channel_info", "channel_id": channel_id})
+            channel_info = self.db.search((self.Query.type == "channel_info") & (self.Query.channel_id == channel_id))
             if channel_info:
                 return channel_info[0]
             return {}
@@ -154,13 +149,13 @@ class PysonDBClient:
             logger.error(f"Failed to get channel info: {e}")
             return {}
 
-def get_db_client() -> PysonDBClient:
+def get_db_client() -> TinyDBClient:
     """Get database client instance"""
     try:
-        return PysonDBClient()
+        return TinyDBClient()
     except Exception as e:
         logger.error(f"Failed to create database client: {e}")
-        # Fallback to a simple implementation if pysonDB fails
+        # Fallback to a simple implementation if TinyDB fails
         return SimpleFallbackClient()
 
 class SimpleFallbackClient:

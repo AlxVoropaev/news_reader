@@ -120,10 +120,7 @@ class CLITask:
             for channel in channels:
                 monitored = "✅" if channel['id'] in self.app.monitored_channels else "  "
                 print(f"{Fore.WHITE}{monitored} {channel['id']:<15} {channel['title']}")
-            
-            # Save channel information to database
-            await self._save_channel_info(channels)
-            
+                       
         except Exception as e:
             logger.error(f"❌ Failed to list channels: {e}")
             print(f"{Fore.RED}❌ Failed to list channels: {e}")

@@ -9,13 +9,7 @@ class Config:
     API_ID = int(os.getenv('API_ID', '0'))
     API_HASH = os.getenv('API_HASH', '')
     PHONE_NUMBER = os.getenv('PHONE_NUMBER', '')
-    
-    # MTProto server configuration
-    MTPROTO_SERVER_IP = os.getenv('MTPROTO_SERVER_IP', '149.154.167.50')
-    MTPROTO_SERVER_PORT = int(os.getenv('MTPROTO_SERVER_PORT', '443'))
-    MTPROTO_PUBLIC_KEY = os.getenv('MTPROTO_PUBLIC_KEY', '')
-    
-    # Session settings - using StringSession (in-memory only, no disk storage)
+    SESSION_NAME = os.getenv('SESSION_NAME', '')
     
     @classmethod
     def validate(cls):

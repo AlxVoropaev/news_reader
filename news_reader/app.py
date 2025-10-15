@@ -5,6 +5,8 @@ Main application controller that coordinates monitoring and CLI tasks
 """
 
 import asyncio
+import aioconsole
+import getpass
 import logging
 import signal
 import sys
@@ -13,6 +15,7 @@ from datetime import datetime
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 from telethon.network.connection import ConnectionTcpFull
+from telethon.errors import SessionPasswordNeededError
 from news_reader.config import Config
 from news_reader.db_client import get_db_client
 from news_reader.monitoring_task import MonitoringTask
@@ -31,8 +34,34 @@ logger = logging.getLogger(__name__)
 
 class NewsReaderApp:
     def __init__(self):
-        self.client: Optional[TelegramClient] = None
+        # Validate configuration
         self.config = Config()
+        self.config.validate()
+
+        # Initialize Telegram client
+        self.client: TelegramClient = TelegramClient(
+            session=self.config.SESSION_NAME,
+            api_id=self.config.API_ID,
+            api_hash=self.config.API_HASH,
+            connection=ConnectionTcpFull,
+            use_ipv6=False,
+            proxy=None,
+            local_addr=None,
+            timeout=10,
+            request_retries=5,
+            connection_retries=5,
+            retry_delay=1,
+            auto_reconnect=True,
+            sequential_updates=False,
+            flood_sleep_threshold=60,
+            device_model='News Reader App',
+            system_version='2.0.0',
+            app_version='2.0.0',
+            lang_code='en',
+            system_lang_code='en'
+        )
+
+        # Initialize rest of the application
         self.db_client = get_db_client()
         self.running = False
         self.monitoring_task: Optional[asyncio.Task] = None
@@ -64,34 +93,7 @@ class NewsReaderApp:
     
     async def _initialize_client(self):
         """Initialize Telegram client with MTProto configuration"""
-        try:
-            # Validate configuration
-            self.config.validate()
-            
-            # Create client with custom MTProto server settings
-            # Use StringSession to keep session in memory only (no disk storage)
-            self.client = TelegramClient(
-                session=StringSession(),
-                api_id=self.config.API_ID,
-                api_hash=self.config.API_HASH,
-                connection=ConnectionTcpFull,
-                use_ipv6=False,
-                proxy=None,
-                local_addr=None,
-                timeout=10,
-                request_retries=5,
-                connection_retries=5,
-                retry_delay=1,
-                auto_reconnect=True,
-                sequential_updates=False,
-                flood_sleep_threshold=60,
-                device_model='News Reader App',
-                system_version='2.0.0',
-                app_version='2.0.0',
-                lang_code='en',
-                system_lang_code='en'
-            )
-            
+        try:            
             # Connect to the client
             await self.client.connect()
             
@@ -113,7 +115,8 @@ class NewsReaderApp:
             print(f"{Fore.YELLOW}🔐 Authorization required...")
             
             # Send code request
-            await self.client.send_code_request(self.config.PHONE_NUMBER)
+            ret = await self.client.send_code_request(self.config.PHONE_NUMBER)
+            print(ret)
             print(f"{Fore.YELLOW}📱 Code sent to {self.config.PHONE_NUMBER}")
             
             # Get code from user
@@ -124,14 +127,12 @@ class NewsReaderApp:
                 await self.client.sign_in(self.config.PHONE_NUMBER, code)
                 print(f"{Fore.GREEN}✅ Successfully authorized!")
                 
-            except Exception as e:
-                if "Two-step verification" in str(e):
-                    # Handle 2FA
-                    password = await aioconsole.ainput(f"{Fore.CYAN}Enter your 2FA password: ")
-                    await self.client.sign_in(password=password)
-                    print(f"{Fore.GREEN}✅ Successfully authorized with 2FA!")
-                else:
-                    raise e
+            except SessionPasswordNeededError as e:
+                # Handle 2FA - use getpass for secure password input
+                print(f"{Fore.CYAN}Enter your 2FA password (input will be hidden): ", end="", flush=True)
+                password = getpass.getpass("")
+                await self.client.sign_in(password=password)
+                print(f"{Fore.GREEN}✅ Successfully authorized with 2FA!")
                     
         except Exception as e:
             logger.error(f"❌ Authorization failed: {e}")
