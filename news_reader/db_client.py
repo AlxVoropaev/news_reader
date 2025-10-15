@@ -29,7 +29,7 @@ class TinyDBClient:
         try:
             from tinydb import TinyDB, Query
             self.db = TinyDB(self.db_path)
-            self.Query = Query
+            self.Query = Query()  # Create Query instance
             logger.info(f"Initialized TinyDB at: {self.db_path}")
         except Exception as e:
             logger.error(f"Failed to initialize TinyDB: {e}")
@@ -148,6 +148,82 @@ class TinyDBClient:
         except Exception as e:
             logger.error(f"Failed to get channel info: {e}")
             return {}
+    
+    def cache_channels_list(self, channels: List[Dict[str, Any]], user: str = 'system') -> bool:
+        """Cache the complete channels list"""
+        try:
+            # Remove existing cached channels
+            self.db.remove(self.Query.type == "cached_channels")
+            
+            # Add new cached channels
+            cache_data = {
+                "type": "cached_channels",
+                "channels": channels,
+                "cached_at": datetime.now().isoformat(),
+                "cached_by": user
+            }
+            
+            self.db.insert(cache_data)
+            logger.info(f"Successfully cached {len(channels)} channels to database")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to cache channels list: {e}")
+            return False
+    
+    def get_cached_channels(self) -> List[Dict[str, Any]]:
+        """Get cached channels list"""
+        try:
+            # Look for cached channels
+            cached_data = self.db.search(self.Query.type == "cached_channels")
+            
+            if cached_data:
+                # Get the most recent cache
+                latest_cache = max(cached_data, key=lambda x: x.get('cached_at', ''))
+                channels = latest_cache.get('channels', [])
+                cached_at = latest_cache.get('cached_at', 'Unknown')
+                logger.info(f"Retrieved {len(channels)} cached channels from database (cached at: {cached_at})")
+                return channels
+            else:
+                logger.info("No cached channels found in database")
+                return []
+                
+        except Exception as e:
+            logger.error(f"Failed to get cached channels: {e}")
+            return []
+    
+    def clear_cached_channels(self) -> bool:
+        """Clear cached channels"""
+        try:
+            # Remove all cached channels
+            self.db.remove(self.Query.type == "cached_channels")
+            
+            logger.info("Successfully cleared cached channels from database")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to clear cached channels: {e}")
+            return False
+    
+    def get_cache_info(self) -> Dict[str, Any]:
+        """Get information about the cached channels"""
+        try:
+            cached_data = self.db.search(self.Query.type == "cached_channels")
+            
+            if cached_data:
+                latest_cache = max(cached_data, key=lambda x: x.get('cached_at', ''))
+                return {
+                    "has_cache": True,
+                    "channels_count": len(latest_cache.get('channels', [])),
+                    "cached_at": latest_cache.get('cached_at', 'Unknown'),
+                    "cached_by": latest_cache.get('cached_by', 'Unknown')
+                }
+            else:
+                return {"has_cache": False}
+                
+        except Exception as e:
+            logger.error(f"Failed to get cache info: {e}")
+            return {"has_cache": False}
 
 def get_db_client() -> TinyDBClient:
     """Get database client instance"""
@@ -216,3 +292,15 @@ class SimpleFallbackClient:
     
     def get_channel_info(self, channel_id: int) -> Dict[str, Any]:
         return {}
+    
+    def cache_channels_list(self, channels: List[Dict[str, Any]], user: str = 'system') -> bool:
+        return True
+    
+    def get_cached_channels(self) -> List[Dict[str, Any]]:
+        return []
+    
+    def clear_cached_channels(self) -> bool:
+        return True
+    
+    def get_cache_info(self) -> Dict[str, Any]:
+        return {"has_cache": False}

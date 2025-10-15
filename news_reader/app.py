@@ -70,6 +70,7 @@ class NewsReaderApp:
         self.cli_task_instance: Optional[CLITask] = None
         self.monitored_channels: List[int] = []
         self.session_data: Dict[str, Any] = {}
+        self.cached_channels: List[Dict[str, Any]] = []
         
     async def startup(self):
         """Initialize the application and perform user login"""
@@ -85,9 +86,18 @@ class NewsReaderApp:
         # Load monitored channels configuration
         await self._load_monitored_channels()
         
+        # Load cached channels or fetch them if not cached
+        await self._load_cached_channels()
+        
         print(f"{Fore.GREEN}✅ Application started successfully!")
         print(f"{Fore.YELLOW}📱 User: {self.session_data.get('user_name', 'Unknown')}")
         print(f"{Fore.YELLOW}📺 Monitoring {len(self.monitored_channels)} channels")
+        
+        cache_info = self.db_client.get_cache_info()
+        if cache_info.get('has_cache'):
+            print(f"{Fore.CYAN}💾 Cached {cache_info.get('channels_count', 0)} channels (last updated: {cache_info.get('cached_at', 'Unknown')})")
+        else:
+            print(f"{Fore.YELLOW}⚠️ No channel cache found - will fetch on first 'channels' command")
         
         return True
     
@@ -164,6 +174,56 @@ class NewsReaderApp:
             logger.error(f"Failed to load monitored channels: {e}")
             self.monitored_channels = []
     
+    async def _load_cached_channels(self):
+        """Load cached channels from database"""
+        try:
+            self.cached_channels = self.db_client.get_cached_channels()
+            logger.info(f"Loaded {len(self.cached_channels)} cached channels")
+        except Exception as e:
+            logger.error(f"Failed to load cached channels: {e}")
+            self.cached_channels = []
+    
+    async def refresh_channels_cache(self, user: str = 'system') -> bool:
+        """Refresh channels cache by fetching from Telegram API"""
+        try:
+            if not self.client:
+                logger.error("Client not initialized")
+                return False
+            
+            print(f"{Fore.CYAN}📡 Fetching channels from Telegram API...")
+            channels = []
+            
+            async for dialog in self.client.iter_dialogs():
+                if dialog.is_channel:
+                    channel_data = {
+                        'id': dialog.id,
+                        'title': dialog.title,
+                        'username': getattr(dialog.entity, 'username', None)
+                    }
+                    channels.append(channel_data)
+                    
+                    # Also save individual channel info
+                    self.db_client.add_channel_info(
+                        channel_id=dialog.id,
+                        channel_title=dialog.title,
+                        channel_username=getattr(dialog.entity, 'username', None)
+                    )
+            
+            # Cache the channels list
+            if self.db_client.cache_channels_list(channels, user):
+                self.cached_channels = channels
+                print(f"{Fore.GREEN}✅ Successfully cached {len(channels)} channels")
+                logger.info(f"Refreshed channels cache with {len(channels)} channels")
+                return True
+            else:
+                print(f"{Fore.RED}❌ Failed to cache channels")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to refresh channels cache: {e}")
+            print(f"{Fore.RED}❌ Failed to refresh channels cache: {e}")
+            return False
+    
     async def run(self):
         """Main application loop"""
         if not await self.startup():
@@ -184,12 +244,16 @@ class NewsReaderApp:
             signal.signal(sig, self._signal_handler)
         
         try:
-            # Wait for tasks to complete
-            await asyncio.gather(
-                self.monitoring_task,
-                self.cli_task,
-                return_exceptions=True
-            )
+            # Wait for tasks to complete or for shutdown signal
+            while self.running:
+                # Check if CLI task has finished
+                if self.cli_task.done():
+                    break
+                await asyncio.sleep(0.1)
+            
+            # If we're here, either running=False or CLI task finished
+            if not self.running:
+                logger.info("Shutdown requested, stopping tasks...")
         except Exception as e:
             logger.error(f"Error in main loop: {e}")
         finally:

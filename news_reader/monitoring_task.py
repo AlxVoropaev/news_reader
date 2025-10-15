@@ -7,7 +7,7 @@ import asyncio
 import logging
 from typing import List
 from datetime import datetime
-from telethon import TelegramClient, events
+from telethon import TelegramClient, events, utils
 from colorama import Fore
 
 logger = logging.getLogger(__name__)
@@ -33,8 +33,12 @@ class MonitoringTask:
                 chat = await event.get_chat()
                 
                 # Check if message is from a monitored channel
-                if hasattr(chat, 'id') and chat.id not in self.monitored_channels:
-                    return  # Skip messages from non-monitored channels
+                # Convert real_id to marked identifier for comparison
+                if hasattr(chat, 'id'):
+                    # Get the marked identifier from the real ID
+                    marked_id = utils.get_peer_id(chat)
+                    if marked_id not in self.monitored_channels:
+                        return  # Skip messages from non-monitored channels
                 
                 sender = await event.get_sender()
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -49,29 +53,7 @@ class MonitoringTask:
                 
             except Exception as e:
                 logger.error(f"❌ Error handling message: {e}")
-        
-        @self.client.on(events.MessageEdited)
-        async def handle_edited_message(event):
-            try:
-                chat = await event.get_chat()
                 
-                # Check if message is from a monitored channel
-                if hasattr(chat, 'id') and chat.id not in self.monitored_channels:
-                    return  # Skip messages from non-monitored channels
-                
-                sender = await event.get_sender()
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                sender_name = getattr(sender, 'first_name', 'Unknown') or 'Unknown'
-                chat_name = getattr(chat, 'title', getattr(chat, 'first_name', 'Private'))
-                
-                print(f"\n{Fore.MAGENTA}✏️ [{timestamp}] Message edited by {sender_name}")
-                print(f"{Fore.BLUE}💬 Chat: {chat_name} (ID: {chat.id})")
-                print(f"{Fore.WHITE}📝 New content: {event.text[:200]}{'...' if len(event.text) > 200 else ''}")
-                print(f"{Fore.GREEN}> ", end="", flush=True)  # Show prompt again
-                
-            except Exception as e:
-                logger.error(f"❌ Error handling edited message: {e}")
-        
         print(f"{Fore.GREEN}📡 Monitoring started for {len(self.monitored_channels)} channels")
         
         # Keep monitoring running

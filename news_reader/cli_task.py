@@ -57,6 +57,11 @@ class CLITask:
             await self._show_status()
         elif cmd == 'channels':
             await self._list_channels()
+        elif cmd == 'update':
+            if len(parts) > 1 and parts[1] == 'list':
+                await self._update_channels_list()
+            else:
+                print(f"{Fore.RED}❌ Unknown update command. Use 'update list' to refresh channel cache.")
         elif cmd == 'monitor':
             if len(parts) > 1 and parts[1] == 'setup':
                 await self._setup_monitoring()
@@ -68,6 +73,7 @@ class CLITask:
             print(f"{Fore.YELLOW}👋 Shutting down...")
             self.app.running = False
             self.running = False
+            return  # Exit the command processing to break the CLI loop
         else:
             print(f"{Fore.RED}❌ Unknown command: {cmd}. Type 'help' for available commands.")
     
@@ -76,7 +82,8 @@ class CLITask:
         print(f"\n{Fore.CYAN}📚 Available Commands:")
         print(f"{Fore.WHITE}  help           - Show this help message")
         print(f"{Fore.WHITE}  status         - Show application status")
-        print(f"{Fore.WHITE}  channels       - List all your channels")
+        print(f"{Fore.WHITE}  channels       - List all your channels (from cache)")
+        print(f"{Fore.WHITE}  update list    - Refresh channel list from Telegram API")
         print(f"{Fore.WHITE}  monitor        - Show monitoring status")
         print(f"{Fore.WHITE}  monitor setup  - Setup channel monitoring")
         print(f"{Fore.WHITE}  reload         - Reload configuration")
@@ -90,34 +97,29 @@ class CLITask:
         print(f"{Fore.WHITE}  Connected: {'Yes' if self.app.client and self.app.client.is_connected() else 'No'}")
         print(f"{Fore.WHITE}  Monitoring: {len(self.app.monitored_channels)} channels")
         print(f"{Fore.WHITE}  Running: {'Yes' if self.app.running else 'No'}")
+        
+        # Show cache information
+        cache_info = self.app.db_client.get_cache_info()
+        if cache_info.get('has_cache'):
+            print(f"{Fore.WHITE}  Cached Channels: {cache_info.get('channels_count', 0)} (last updated: {cache_info.get('cached_at', 'Unknown')})")
+        else:
+            print(f"{Fore.WHITE}  Cached Channels: None (use 'update list' to cache)")
     
     async def _list_channels(self):
-        """List all user's channels"""
+        """List all user's channels from cache"""
         try:
-            if not self.app.client:
-                print(f"{Fore.RED}❌ Client not initialized")
+            # Check if we have cached channels
+            if not self.app.cached_channels:
+                print(f"{Fore.YELLOW}📭 No cached channels found.")
+                print(f"{Fore.CYAN}💡 Use 'update list' to fetch channels from Telegram API")
                 return
             
-            print(f"{Fore.CYAN}📡 Fetching your channels...")
-            channels = []
-            
-            async for dialog in self.app.client.iter_dialogs():
-                if dialog.is_channel:
-                    channels.append({
-                        'id': dialog.id,
-                        'title': dialog.title,
-                        'entity': dialog.entity
-                    })
-            
-            if not channels:
-                print(f"{Fore.YELLOW}📭 No channels found.")
-                return
-            
-            print(f"\n{Fore.GREEN}📺 Your channels:")
+            cache_info = self.app.db_client.get_cache_info()
+            print(f"{Fore.CYAN}📺 Your channels (cached at: {cache_info.get('cached_at', 'Unknown')}):")
             print(f"{Fore.CYAN}{'ID':<15} {'Title'}")
             print("-" * 60)
             
-            for channel in channels:
+            for channel in self.app.cached_channels:
                 monitored = "✅" if channel['id'] in self.app.monitored_channels else "  "
                 print(f"{Fore.WHITE}{monitored} {channel['id']:<15} {channel['title']}")
                        
@@ -125,9 +127,32 @@ class CLITask:
             logger.error(f"❌ Failed to list channels: {e}")
             print(f"{Fore.RED}❌ Failed to list channels: {e}")
     
+    async def _update_channels_list(self):
+        """Update channels list by fetching from Telegram API"""
+        try:
+            user_name = self.app.session_data.get('user_name', 'system')
+            if await self.app.refresh_channels_cache(user_name):
+                print(f"{Fore.GREEN}✅ Channel list updated successfully!")
+                
+                # Show updated count
+                cache_info = self.app.db_client.get_cache_info()
+                print(f"{Fore.CYAN}📊 Total channels: {cache_info.get('channels_count', 0)}")
+            else:
+                print(f"{Fore.RED}❌ Failed to update channel list")
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to update channels list: {e}")
+            print(f"{Fore.RED}❌ Failed to update channels list: {e}")
+    
     async def _setup_monitoring(self):
         """Setup channel monitoring"""
         try:
+            # Check if we have cached channels
+            if not self.app.cached_channels:
+                print(f"{Fore.YELLOW}📭 No cached channels found.")
+                print(f"{Fore.CYAN}💡 Use 'update list' first to fetch channels from Telegram API")
+                return
+            
             # First list channels
             await self._list_channels()
             
@@ -137,11 +162,8 @@ class CLITask:
             user_input = await aioconsole.ainput(f"{Fore.WHITE}> ")
             user_input = user_input.strip()
             
-            # Get all channels first
-            channels = []
-            async for dialog in self.app.client.iter_dialogs():
-                if dialog.is_channel:
-                    channels.append({'id': dialog.id, 'title': dialog.title})
+            # Use cached channels
+            channels = self.app.cached_channels
             
             if user_input.lower() == 'all':
                 selected_channels = [ch['id'] for ch in channels]
