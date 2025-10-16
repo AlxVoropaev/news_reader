@@ -1,6 +1,9 @@
 # News Reader
 
-A unified Telegram client application built with Telethon library for reading news and messages, featuring real-time monitoring, interactive CLI, and MTProto server configuration.
+A specialized Telegram client that reads your newsfeed and uses an LLM to provide a daily summary.
+
+![Interface](assets/interface.png)
+
 
 ## Features
 
