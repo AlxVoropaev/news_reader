@@ -134,10 +134,8 @@ dmypy.json
 sessions/
 
 # Database files
-data/*.json
-!data/.gitkeep
 monitoring_config*.json
-monitored_channels.json
+logs.txt
 
 # Logs
 logs/

@@ -4,7 +4,6 @@ Textual CLI Task - Handles interactive menu-based interface using Textual librar
 """
 
 import asyncio
-import logging
 from typing import TYPE_CHECKING, List, Dict, Any
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
@@ -18,11 +17,12 @@ from textual.message import Message
 from textual import on
 from colorama import Fore
 import pyperclip
+from news_reader.logging_config import get_logger
 
 if TYPE_CHECKING:
     from news_reader.app import NewsReaderApp
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class StatusScreen(Screen):
     """Screen showing application status"""

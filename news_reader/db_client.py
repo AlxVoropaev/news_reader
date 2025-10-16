@@ -3,12 +3,12 @@
 Database Client - Client for interacting with TinyDB
 """
 
-import logging
 from typing import List, Dict, Any
 import os
 from datetime import datetime
+from news_reader.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class TinyDBClient:
     """Database client using TinyDB for local JSON database"""

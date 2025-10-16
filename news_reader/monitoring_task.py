@@ -4,13 +4,13 @@ Monitoring Task - Handles Telegram message monitoring
 """
 
 import asyncio
-import logging
 from typing import List
 from datetime import datetime
 from telethon import TelegramClient, events, utils
 from colorama import Fore
+from news_reader.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class MonitoringTask:
     def __init__(self, client: TelegramClient, monitored_channels: List[int], gui_logger=None):

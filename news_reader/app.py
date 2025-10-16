@@ -25,12 +25,12 @@ from colorama import init, Fore, Style
 # Initialize colorama for colored output
 init(autoreset=True)
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Configure logging to write to file instead of console
+from news_reader.logging_config import setup_logging, get_logger
+
+# Setup centralized logging
+setup_logging()
+logger = get_logger(__name__)
 
 class NewsReaderApp:
     def __init__(self):

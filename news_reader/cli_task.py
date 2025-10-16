@@ -3,16 +3,16 @@
 CLI Task - Handles interactive command-line interface
 """
 
-import logging
 from typing import TYPE_CHECKING
 from colorama import Fore
 import aioconsole
 import pyperclip
+from news_reader.logging_config import get_logger
 
 if TYPE_CHECKING:
     from news_reader.app import NewsReaderApp
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class CLITask:
     def __init__(self, app: 'NewsReaderApp'):
