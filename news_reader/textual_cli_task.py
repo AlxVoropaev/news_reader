@@ -10,13 +10,14 @@ from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import (
     Header, Footer, Static, Button, Label, ListItem, ListView, 
-    Input, Checkbox, DataTable, Rule
+    Input, Checkbox, DataTable, Rule, RichLog
 )
 from textual.screen import Screen
 from textual.binding import Binding
 from textual.message import Message
 from textual import on
 from colorama import Fore
+import pyperclip
 
 if TYPE_CHECKING:
     from news_reader.app import NewsReaderApp
@@ -80,6 +81,7 @@ class ChannelsScreen(Screen):
     BINDINGS = [
         Binding("escape", "back", "Back to Main Menu"),
         Binding("u", "update", "Update Channels"),
+        Binding("c", "copy", "Copy Channel ID"),
         Binding("q", "quit", "Quit Application"),
     ]
     
@@ -92,8 +94,13 @@ class ChannelsScreen(Screen):
         yield Container(
             Static("📺 Your Channels", classes="title"),
             Rule(),
-            Static("Press 'u' to update channels from Telegram API", classes="help_text"),
+            Static("Press 'u' to update channels, 'c' to copy selected channel ID", classes="help_text"),
             DataTable(id="channels_table"),
+            Horizontal(
+                Button("Update Channels", id="update_btn", variant="primary"),
+                Button("Copy Channel ID", id="copy_btn", variant="success"),
+                classes="button_row"
+            ),
             classes="channels_container"
         )
         yield Footer()
@@ -106,6 +113,7 @@ class ChannelsScreen(Screen):
         table = self.query_one("#channels_table", DataTable)
         table.clear(columns=True)
         table.add_columns("Status", "ID", "Title")
+        table.cursor_type = "row"  # Enable row selection
         
         if not self.app_instance.cached_channels:
             table.add_row("", "", "No cached channels found. Press 'u' to fetch from Telegram API")
@@ -113,7 +121,7 @@ class ChannelsScreen(Screen):
         
         for channel in self.app_instance.cached_channels:
             monitored = "✅" if channel['id'] in self.app_instance.monitored_channels else ""
-            table.add_row(monitored, str(channel['id']), channel['title'])
+            table.add_row(monitored, str(channel['id']), channel['title'], key=str(channel['id']))
     
     async def action_update(self) -> None:
         """Update channels from Telegram API"""
@@ -132,6 +140,51 @@ class ChannelsScreen(Screen):
             self.notify("❌ Failed to update channel list", severity="error")
         
         self.update_channels_display()
+    
+    @on(Button.Pressed, "#update_btn")
+    def update_button_pressed(self) -> None:
+        """Handle update button press"""
+        asyncio.create_task(self.action_update())
+    
+    @on(Button.Pressed, "#copy_btn")
+    def copy_button_pressed(self) -> None:
+        """Handle copy button press"""
+        self.action_copy()
+    
+    def action_copy(self) -> None:
+        """Copy selected channel ID to clipboard"""
+        table = self.query_one("#channels_table", DataTable)
+        
+        if not self.app_instance.cached_channels:
+            self.notify("❌ No channels available to copy", severity="error")
+            return
+        
+        # Get the selected row
+        if table.cursor_row is None or table.cursor_row < 0:
+            self.notify("❌ Please select a channel to copy", severity="error")
+            return
+        
+        try:
+            # Get the channel ID from the selected row
+            row_key = table.get_row_at(table.cursor_row).key
+            if row_key:
+                channel_id = row_key
+                
+                # Find the channel to get its title
+                channel_title = "Unknown"
+                for channel in self.app_instance.cached_channels:
+                    if str(channel['id']) == channel_id:
+                        channel_title = channel['title']
+                        break
+                
+                # Copy to clipboard
+                pyperclip.copy(channel_id)
+                self.notify(f"✅ Copied channel ID {channel_id} to clipboard!\n📋 Channel: {channel_title}")
+            else:
+                self.notify("❌ Could not get channel ID from selection", severity="error")
+        except Exception as e:
+            logger.error(f"Failed to copy channel ID: {e}")
+            self.notify(f"❌ Failed to copy channel ID: {e}", severity="error")
     
     def action_back(self) -> None:
         self.app.pop_screen()
@@ -303,6 +356,71 @@ class MonitoringSetupScreen(Screen):
     def action_back(self) -> None:
         self.app.pop_screen()
 
+class LogsScreen(Screen):
+    """Screen showing monitoring logs"""
+    
+    BINDINGS = [
+        Binding("escape", "back", "Back to Main Menu"),
+        Binding("c", "clear", "Clear Logs"),
+        Binding("q", "quit", "Quit Application"),
+    ]
+    
+    def __init__(self, app_instance: 'NewsReaderApp'):
+        super().__init__()
+        self.app_instance = app_instance
+    
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Container(
+            Static("📋 Monitoring Logs", classes="title"),
+            Rule(),
+            Static("Press 'c' to clear logs, 'escape' to go back", classes="help_text"),
+            RichLog(id="logs_display", highlight=True, markup=True),
+            Horizontal(
+                Button("Clear Logs", id="clear_btn", variant="warning"),
+                Button("Back", id="back_btn"),
+                classes="button_row"
+            ),
+            classes="logs_container"
+        )
+        yield Footer()
+    
+    def on_mount(self) -> None:
+        """Initialize logs display"""
+        logs_widget = self.query_one("#logs_display", RichLog)
+        logs_widget.write("📋 Monitoring logs will appear here...")
+    
+    def add_log(self, message: str) -> None:
+        """Add a log message to the display"""
+        try:
+            logs_widget = self.query_one("#logs_display", RichLog)
+            logs_widget.write(message)
+        except Exception as e:
+            logger.error(f"Failed to add log to display: {e}")
+    
+    @on(Button.Pressed, "#clear_btn")
+    def clear_logs(self) -> None:
+        """Clear all logs"""
+        logs_widget = self.query_one("#logs_display", RichLog)
+        logs_widget.clear()
+        logs_widget.write("📋 Logs cleared.")
+        self.notify("✅ Logs cleared")
+    
+    @on(Button.Pressed, "#back_btn")
+    def go_back(self) -> None:
+        """Go back to main menu"""
+        self.app.pop_screen()
+    
+    def action_clear(self) -> None:
+        """Clear logs hotkey"""
+        self.clear_logs()
+    
+    def action_back(self) -> None:
+        self.app.pop_screen()
+    
+    def action_quit(self) -> None:
+        self.app.exit()
+
 class MainMenuScreen(Screen):
     """Main menu screen"""
     
@@ -310,7 +428,8 @@ class MainMenuScreen(Screen):
         Binding("1", "status", "Application Status"),
         Binding("2", "channels", "View Channels"),
         Binding("3", "monitoring", "Monitoring"),
-        Binding("4", "reload", "Reload Config"),
+        Binding("4", "logs", "View Logs"),
+        Binding("5", "reload", "Reload Config"),
         Binding("q", "quit", "Quit Application"),
     ]
     
@@ -327,7 +446,8 @@ class MainMenuScreen(Screen):
                 Button("1. Application Status", id="status_btn", classes="menu_button"),
                 Button("2. View Channels", id="channels_btn", classes="menu_button"),
                 Button("3. Monitoring", id="monitoring_btn", classes="menu_button"),
-                Button("4. Reload Configuration", id="reload_btn", classes="menu_button"),
+                Button("4. View Logs", id="logs_btn", classes="menu_button"),
+                Button("5. Reload Configuration", id="reload_btn", classes="menu_button"),
                 Rule(),
                 Button("Q. Quit Application", id="quit_btn", variant="error", classes="menu_button"),
                 classes="menu_container"
@@ -347,6 +467,10 @@ class MainMenuScreen(Screen):
     @on(Button.Pressed, "#monitoring_btn")
     def show_monitoring(self) -> None:
         self.app.push_screen(MonitoringScreen(self.app_instance))
+    
+    @on(Button.Pressed, "#logs_btn")
+    def show_logs(self) -> None:
+        self.app.push_screen(LogsScreen(self.app_instance))
     
     @on(Button.Pressed, "#reload_btn")
     async def reload_config(self) -> None:
@@ -369,6 +493,9 @@ class MainMenuScreen(Screen):
     
     def action_monitoring(self) -> None:
         self.show_monitoring()
+    
+    def action_logs(self) -> None:
+        self.show_logs()
     
     def action_reload(self) -> None:
         asyncio.create_task(self.reload_config())
@@ -408,7 +535,7 @@ class NewsReaderTextualApp(App):
         align: center middle;
     }
     
-    .status_container, .channels_container, .monitoring_container, .setup_container {
+    .status_container, .channels_container, .monitoring_container, .setup_container, .logs_container {
         padding: 1;
         margin: 1;
     }
@@ -429,6 +556,13 @@ class NewsReaderTextualApp(App):
         margin: 1;
         padding: 1;
     }
+    
+    #logs_display {
+        height: 20;
+        border: solid white;
+        margin: 1;
+        padding: 1;
+    }
     """
     
     def __init__(self, app_instance: 'NewsReaderApp'):
@@ -439,6 +573,17 @@ class NewsReaderTextualApp(App):
     
     def on_mount(self) -> None:
         self.push_screen(MainMenuScreen(self.app_instance))
+    
+    def add_log_message(self, message: str) -> None:
+        """Add a log message to the logs screen if it exists"""
+        try:
+            # Check if logs screen is currently active
+            for screen in self.screen_stack:
+                if isinstance(screen, LogsScreen):
+                    screen.add_log(message)
+                    break
+        except Exception as e:
+            logger.error(f"Failed to add log message to GUI: {e}")
 
 class TextualCLITask:
     """Textual-based CLI task that replaces the old CLI task"""
@@ -470,3 +615,8 @@ class TextualCLITask:
         self.running = False
         if self.textual_app:
             self.textual_app.exit()
+    
+    def add_log_message(self, message: str) -> None:
+        """Add a log message to the GUI"""
+        if self.textual_app:
+            self.textual_app.add_log_message(message)

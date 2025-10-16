@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 from colorama import Fore
 import aioconsole
+import pyperclip
 
 if TYPE_CHECKING:
     from news_reader.app import NewsReaderApp
@@ -57,6 +58,11 @@ class CLITask:
             await self._show_status()
         elif cmd == 'channels':
             await self._list_channels()
+        elif cmd == 'copy':
+            if len(parts) > 1:
+                await self._copy_channel_id(parts[1])
+            else:
+                print(f"{Fore.RED}❌ Please specify a channel ID to copy. Usage: copy <channel_id>")
         elif cmd == 'update':
             if len(parts) > 1 and parts[1] == 'list':
                 await self._update_channels_list()
@@ -83,6 +89,7 @@ class CLITask:
         print(f"{Fore.WHITE}  help           - Show this help message")
         print(f"{Fore.WHITE}  status         - Show application status")
         print(f"{Fore.WHITE}  channels       - List all your channels (from cache)")
+        print(f"{Fore.WHITE}  copy <id>      - Copy channel ID to clipboard")
         print(f"{Fore.WHITE}  update list    - Refresh channel list from Telegram API")
         print(f"{Fore.WHITE}  monitor        - Show monitoring status")
         print(f"{Fore.WHITE}  monitor setup  - Setup channel monitoring")
@@ -122,10 +129,47 @@ class CLITask:
             for channel in self.app.cached_channels:
                 monitored = "✅" if channel['id'] in self.app.monitored_channels else "  "
                 print(f"{Fore.WHITE}{monitored} {channel['id']:<15} {channel['title']}")
+            
+            print(f"\n{Fore.YELLOW}💡 Tip: Use 'copy <channel_id>' to copy a channel ID to clipboard")
                        
         except Exception as e:
             logger.error(f"❌ Failed to list channels: {e}")
             print(f"{Fore.RED}❌ Failed to list channels: {e}")
+    
+    async def _copy_channel_id(self, channel_id_str: str):
+        """Copy channel ID to clipboard"""
+        try:
+            # Convert to integer to validate
+            channel_id = int(channel_id_str)
+            
+            # Check if channel exists in cached channels
+            if not self.app.cached_channels:
+                print(f"{Fore.YELLOW}📭 No cached channels found.")
+                print(f"{Fore.CYAN}💡 Use 'update list' to fetch channels from Telegram API first")
+                return
+            
+            # Find the channel
+            channel_found = None
+            for channel in self.app.cached_channels:
+                if channel['id'] == channel_id:
+                    channel_found = channel
+                    break
+            
+            if not channel_found:
+                print(f"{Fore.RED}❌ Channel ID {channel_id} not found in your channels list")
+                print(f"{Fore.CYAN}💡 Use 'channels' command to see available channels")
+                return
+            
+            # Copy to clipboard
+            pyperclip.copy(str(channel_id))
+            print(f"{Fore.GREEN}✅ Copied channel ID {channel_id} to clipboard!")
+            print(f"{Fore.CYAN}📋 Channel: {channel_found['title']}")
+            
+        except ValueError:
+            print(f"{Fore.RED}❌ Invalid channel ID. Please enter a numeric channel ID.")
+        except Exception as e:
+            logger.error(f"❌ Failed to copy channel ID: {e}")
+            print(f"{Fore.RED}❌ Failed to copy channel ID: {e}")
     
     async def _update_channels_list(self):
         """Update channels list by fetching from Telegram API"""

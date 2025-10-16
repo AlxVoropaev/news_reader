@@ -232,8 +232,8 @@ class NewsReaderApp:
         self.running = True
         
         # Create task instances
-        self.monitoring_task_instance = MonitoringTask(self.client, self.monitored_channels)
         self.cli_task_instance = TextualCLITask(self)
+        self.monitoring_task_instance = MonitoringTask(self.client, self.monitored_channels, self.cli_task_instance)
         
         # Start background tasks
         self.monitoring_task = asyncio.create_task(self.monitoring_task_instance.start())

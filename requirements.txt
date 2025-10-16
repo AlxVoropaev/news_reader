@@ -4,3 +4,4 @@ colorama==0.4.6
 tinydb==4.8.0
 aioconsole==0.7.0
 textual==0.41.0
+pyperclip==1.8.2
