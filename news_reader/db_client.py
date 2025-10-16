@@ -224,6 +224,52 @@ class TinyDBClient:
         except Exception as e:
             logger.error(f"Failed to get cache info: {e}")
             return {"has_cache": False}
+    
+    def save_incoming_message(self, message_data: Dict[str, Any]) -> bool:
+        """Save an incoming message to the database"""
+        try:
+            message_record = {
+                "type": "incoming_message",
+                "message_id": message_data.get('message_id'),
+                "chat_id": message_data.get('chat_id'),
+                "chat_name": message_data.get('chat_name'),
+                "sender_id": message_data.get('sender_id'),
+                "sender_name": message_data.get('sender_name'),
+                "message_text": message_data.get('message_text'),
+                "timestamp": message_data.get('timestamp'),
+                "received_at": datetime.now().isoformat()
+            }
+            
+            self.db.insert(message_record)
+            logger.debug(f"Saved incoming message from {message_data.get('sender_name')} in {message_data.get('chat_name')}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to save incoming message: {e}")
+            return False
+    
+    def get_all_incoming_messages(self) -> List[Dict[str, Any]]:
+        """Get all incoming messages from the database"""
+        try:
+            messages = self.db.search(self.Query.type == "incoming_message")
+            logger.info(f"Retrieved {len(messages)} incoming messages from database")
+            return messages
+            
+        except Exception as e:
+            logger.error(f"Failed to get incoming messages: {e}")
+            return []
+    
+    def clear_incoming_messages(self) -> bool:
+        """Clear all incoming messages from the database"""
+        try:
+            removed_count = len(self.db.search(self.Query.type == "incoming_message"))
+            self.db.remove(self.Query.type == "incoming_message")
+            logger.info(f"Successfully cleared {removed_count} incoming messages from database")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to clear incoming messages: {e}")
+            return False
 
 def get_db_client() -> TinyDBClient:
     """Get database client instance"""
@@ -231,76 +277,5 @@ def get_db_client() -> TinyDBClient:
         return TinyDBClient()
     except Exception as e:
         logger.error(f"Failed to create database client: {e}")
-        # Fallback to a simple implementation if TinyDB fails
-        return SimpleFallbackClient()
-
-class SimpleFallbackClient:
-    """Simple fallback client using JSON file if pysonDB fails"""
-    
-    def __init__(self, file_path: str = 'monitoring_config_fallback.json'):
-        self.file_path = file_path
-    
-    def health_check(self) -> bool:
-        return True
-    
-    def get_monitored_channels(self) -> List[int]:
-        try:
-            import json
-            if not os.path.exists(self.file_path):
-                return []
-            
-            with open(self.file_path, 'r') as f:
-                data = json.load(f)
-            
-            return data.get('monitored_channels', [])
-        except Exception as e:
-            logger.error(f"Fallback: Failed to read file: {e}")
-            return []
-    
-    def set_monitored_channels(self, channels: List[int], user: str = 'system') -> bool:
-        try:
-            import json
-            data = {
-                'monitored_channels': channels,
-                'updated_at': datetime.now().isoformat(),
-                'updated_by': user
-            }
-            
-            with open(self.file_path, 'w') as f:
-                json.dump(data, f, indent=2)
-            
-            logger.info(f"Fallback: Saved {len(channels)} channels")
-            return True
-        except Exception as e:
-            logger.error(f"Fallback: Failed to write file: {e}")
-            return False
-    
-    def clear_monitored_channels(self) -> bool:
-        try:
-            if os.path.exists(self.file_path):
-                os.remove(self.file_path)
-            return True
-        except Exception as e:
-            logger.error(f"Fallback: Failed to clear file: {e}")
-            return False
-    
-    def get_all_config(self) -> Dict[str, Any]:
-        return {}
-    
-    def add_channel_info(self, channel_id: int, channel_title: str, channel_username: str = None) -> bool:
-        return True
-    
-    def get_channel_info(self, channel_id: int) -> Dict[str, Any]:
-        return {}
-    
-    def cache_channels_list(self, channels: List[Dict[str, Any]], user: str = 'system') -> bool:
-        return True
-    
-    def get_cached_channels(self) -> List[Dict[str, Any]]:
-        return []
-    
-    def clear_cached_channels(self) -> bool:
-        return True
-    
-    def get_cache_info(self) -> Dict[str, Any]:
-        return {"has_cache": False}
+        logger.error("Database is required for the application to function properly")
+        raise RuntimeError(f"Cannot initialize database client: {e}. The application cannot work without a database.")
