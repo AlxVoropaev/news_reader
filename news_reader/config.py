@@ -11,10 +11,13 @@ class Config:
     PHONE_NUMBER = os.getenv('PHONE_NUMBER', '')
     SESSION_NAME = os.getenv('SESSION_NAME', '')
     
-    # Custom LLM API configuration
-    LLM_ENDPOINT_URL = os.getenv('LLM_ENDPOINT_URL', '')
-    LLM_MODEL_NAME = os.getenv('LLM_MODEL_NAME', '')
-    LLM_API_KEY = os.getenv('LLM_API_KEY', '')
+    # OpenAI API configuration
+    LLM_API_KEY = os.getenv('LLM_API_KEY', '')  # OpenAI API key
+    LLM_MODEL_NAME = os.getenv('LLM_MODEL_NAME', 'gpt-3.5-turbo')  # OpenAI model name
+    LLM_ENDPOINT_URL = os.getenv('LLM_ENDPOINT_URL', '')  # Optional: Custom base URL for OpenAI-compatible APIs
+    
+    # Channel configuration
+    SINK_CHANNEL = int(os.getenv('SINK_CHANNEL', ''))  # Channel ID or username to send summaries to
     
     @classmethod
     def validate(cls):

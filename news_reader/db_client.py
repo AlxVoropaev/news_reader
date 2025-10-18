@@ -237,6 +237,7 @@ class TinyDBClient:
                 "sender_name": message_data.get('sender_name'),
                 "message_text": message_data.get('message_text'),
                 "timestamp": message_data.get('timestamp'),
+                "message_link": message_data.get('message_link'),  # Store message link
                 "received_at": datetime.now().isoformat(),
                 "llm_summary": message_data.get('llm_summary'),  # Store LLM summary
                 "summary_generated_at": message_data.get('summary_generated_at')  # When summary was created

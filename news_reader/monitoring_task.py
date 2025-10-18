@@ -11,6 +11,7 @@ from colorama import Fore
 from news_reader.logging_config import get_logger
 from news_reader.db_client import get_db_client
 from news_reader.llm_service import get_llm_service
+from news_reader.channel_sender import get_channel_sender
 from news_reader.config import Config
 
 logger = get_logger(__name__)
@@ -23,6 +24,7 @@ class MonitoringTask:
         self.gui_logger = gui_logger  # Reference to GUI logger (TextualCLITask)
         self.db_client = get_db_client()  # Database client for saving messages
         self.llm_service = get_llm_service()  # LLM service for message summarization
+        self.channel_sender = get_channel_sender(client)  # Channel sender for SINK_CHANNEL
         self.hourly_task = None  # Task for hourly message processing
     
     def log_to_gui(self, message: str) -> None:
@@ -42,6 +44,23 @@ class MonitoringTask:
             return
         
         logger.info(f"Starting monitoring for {len(self.monitored_channels)} channels")
+        
+        # Test SINK_CHANNEL configuration if enabled
+        if self.channel_sender and self.channel_sender.is_configured():
+            try:
+                success, message = await self.channel_sender.test_sink_channel_access()
+                if success:
+                    self.log_to_gui(f"[green]✅ SINK_CHANNEL test successful: {message}[/green]")
+                    logger.info(f"SINK_CHANNEL test successful: {message}")
+                else:
+                    self.log_to_gui(f"[red]❌ SINK_CHANNEL test failed: {message}[/red]")
+                    logger.warning(f"SINK_CHANNEL test failed: {message}")
+            except Exception as e:
+                self.log_to_gui(f"[red]❌ Error testing SINK_CHANNEL: {e}[/red]")
+                logger.error(f"Error testing SINK_CHANNEL: {e}")
+        else:
+            self.log_to_gui(f"[yellow]ℹ️ SINK_CHANNEL not configured - summaries will not be forwarded[/yellow]")
+            logger.info("SINK_CHANNEL not configured - summaries will not be forwarded")
         
         # Register event handlers
         @self.client.on(events.NewMessage)
@@ -65,6 +84,12 @@ class MonitoringTask:
                 # Format message for GUI display
                 message_text = event.text[:200] + ('...' if len(event.text) > 200 else '') if event.text else '[No text]'
                 
+                # Create message link
+                # For channels, use format: https://t.me/c/{chat_id_without_prefix}/{message_id}
+                # Remove the -100 prefix from channel IDs for the link
+                chat_id_for_link = str(chat.id)[4:] if str(chat.id).startswith('-100') else str(chat.id)
+                message_link = f"https://t.me/c/{chat_id_for_link}/{event.id}"
+                
                 # Prepare message data
                 message_data = {
                     'message_id': event.id,
@@ -73,7 +98,8 @@ class MonitoringTask:
                     'sender_id': sender.id if sender else None,
                     'sender_name': sender_name,
                     'message_text': event.text or '[No text]',
-                    'timestamp': timestamp
+                    'timestamp': timestamp,
+                    'message_link': message_link
                 }
                 
                 # Generate LLM summary if service is available
@@ -85,6 +111,18 @@ class MonitoringTask:
                             message_data['llm_summary'] = summary
                             message_data['summary_generated_at'] = datetime.now().isoformat()
                             self.log_to_gui(f"[green]🤖 Generated LLM summary for message from {sender_name}[/green]")
+                            
+                            # Send summary to SINK_CHANNEL if configured
+                            try:
+                                sent_successfully = await self.channel_sender.send_summary_to_sink_channel(summary, message_data)
+                                if sent_successfully:
+                                    self.log_to_gui(f"[green]📤 Sent summary to SINK_CHANNEL[/green]")
+                                    logger.info(f"Successfully sent summary to SINK_CHANNEL for message from {sender_name}")
+                                else:
+                                    self.log_to_gui(f"[yellow]⚠️ Failed to send summary to SINK_CHANNEL[/yellow]")
+                            except Exception as channel_error:
+                                logger.error(f"Error sending summary to SINK_CHANNEL: {channel_error}")
+                                self.log_to_gui(f"[red]❌ Error sending to SINK_CHANNEL: {channel_error}[/red]")
                     except Exception as llm_error:
                         logger.error(f"Failed to generate LLM summary: {llm_error}")
                         self.log_to_gui(f"[red]❌ LLM summarization failed: {llm_error}[/red]")

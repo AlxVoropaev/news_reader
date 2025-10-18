@@ -1,39 +1,44 @@
 #!/usr/bin/env python3
 """
-LLM Service - Handles custom LLM API integration for message summarization
+LLM Service - Handles OpenAI API integration for message summarization
 """
 
 import os
 import asyncio
-import json
 from typing import Dict, Any, Optional
 from datetime import datetime
-import aiohttp
+from openai import AsyncOpenAI
 from news_reader.logging_config import get_logger
 from news_reader.config import Config
 
 logger = get_logger(__name__)
 
 class LLMService:
-    """Service for handling LLM operations using custom API endpoint"""
+    """Service for handling LLM operations using OpenAI API"""
     
-    def __init__(self, endpoint_url: Optional[str] = None, model_name: Optional[str] = None, api_key: Optional[str] = None):
-        """Initialize LLM service with custom endpoint configuration"""
-        self.endpoint_url = endpoint_url or Config.LLM_ENDPOINT_URL
-        self.model_name = model_name or Config.LLM_MODEL_NAME
-        self.api_key = api_key or Config.LLM_API_KEY
+    def __init__(self, api_key: Optional[str] = None, model_name: Optional[str] = None, base_url: Optional[str] = None):
+        """Initialize LLM service with OpenAI configuration"""
+        self.api_key = api_key if api_key is not None else Config.LLM_API_KEY
+        self.model_name = model_name if model_name is not None else (Config.LLM_MODEL_NAME or "gpt-3.5-turbo")
+        self.base_url = base_url if base_url is not None else Config.LLM_ENDPOINT_URL
         
-        if not all([self.endpoint_url, self.model_name, self.api_key]):
-            logger.warning("Custom LLM configuration incomplete. LLM processing will be disabled.")
-            logger.warning(f"Endpoint: {'✓' if self.endpoint_url else '✗'}, Model: {'✓' if self.model_name else '✗'}, API Key: {'✓' if self.api_key else '✗'}")
+        if not self.api_key or self.api_key.strip() == '':
+            logger.warning("OpenAI API key not provided. LLM processing will be disabled.")
+            logger.warning(f"API Key: {'✗'}, Model: {self.model_name}")
+            self.client = None
         else:
-            logger.info(f"Custom LLM service initialized - Endpoint: {self.endpoint_url}, Model: {self.model_name}")
+            # Initialize OpenAI client
+            client_kwargs = {"api_key": self.api_key}
+            if self.base_url:
+                client_kwargs["base_url"] = self.base_url
+                logger.info(f"OpenAI service initialized with custom endpoint - Base URL: {self.base_url}, Model: {self.model_name}")
+            else:
+                logger.info(f"OpenAI service initialized - Model: {self.model_name}")
+            
+            self.client = AsyncOpenAI(**client_kwargs)
         
         # Load summarization prompt
         self.prompt_template = self._load_prompt_template()
-        
-        # HTTP session for reusing connections
-        self.session = None
     
     def _load_prompt_template(self) -> str:
         """Load the summarization prompt template from file"""
@@ -55,23 +60,12 @@ class LLMService:
     
     def is_available(self) -> bool:
         """Check if LLM service is available (has valid configuration)"""
-        return all([self.endpoint_url, self.model_name, self.api_key])
+        return self.client is not None and bool(self.api_key)
     
-    async def _get_session(self) -> aiohttp.ClientSession:
-        """Get or create HTTP session"""
-        if self.session is None or self.session.closed:
-            timeout = aiohttp.ClientTimeout(total=60)  # 60 second timeout
-            self.session = aiohttp.ClientSession(timeout=timeout)
-        return self.session
-    
-    async def _close_session(self):
-        """Close HTTP session"""
-        if self.session and not self.session.closed:
-            await self.session.close()
     
     async def summarize_message(self, message_data: Dict[str, Any]) -> Optional[str]:
         """
-        Summarize a message using custom LLM API
+        Summarize a message using OpenAI API
         
         Args:
             message_data: Dictionary containing message information
@@ -93,51 +87,34 @@ class LLMService:
                 message_text=message_data.get('message_text', ''),
                 channel_name=message_data.get('chat_name', 'Unknown'),
                 sender_name=message_data.get('sender_name', 'Unknown'),
-                timestamp=message_data.get('timestamp', 'Unknown')
+                timestamp=message_data.get('timestamp', 'Unknown'),
+                message_link=message_data.get('message_link', '')
             )
             
-            # Prepare the request payload (OpenAI-compatible format)
-            payload = {
-                "model": self.model_name,
-                "messages": [
+            # Make the API request using OpenAI client
+            response = await self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[
                     {"role": "system", "content": "You are a helpful news summarization assistant."},
                     {"role": "user", "content": prompt}
                 ],
-                "max_tokens": 300,
-                "temperature": 0.3
-            }
+                max_tokens=300,
+                temperature=0.3,
+                timeout=60.0  # 60 second timeout
+            )
             
-            # Prepare headers
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}"
-            }
+            # Extract summary from response
+            if response.choices and len(response.choices) > 0:
+                summary = response.choices[0].message.content.strip()
+                
+                logger.info(f"Successfully generated summary for message from {message_data.get('sender_name', 'Unknown')}")
+                logger.debug(f"Summary: {summary[:100]}...")
+                
+                return summary
+            else:
+                logger.error("No choices returned in OpenAI response")
+                return None
             
-            # Make the API request
-            session = await self._get_session()
-            async with session.post(self.endpoint_url, json=payload, headers=headers) as response:
-                if response.status == 200:
-                    result = await response.json()
-                    
-                    # Extract summary from response (OpenAI-compatible format)
-                    if 'choices' in result and len(result['choices']) > 0:
-                        summary = result['choices'][0]['message']['content'].strip()
-                        
-                        logger.info(f"Successfully generated summary for message from {message_data.get('sender_name', 'Unknown')}")
-                        logger.debug(f"Summary: {summary[:100]}...")
-                        
-                        return summary
-                    else:
-                        logger.error(f"Unexpected response format: {result}")
-                        return None
-                else:
-                    error_text = await response.text()
-                    logger.error(f"LLM API request failed with status {response.status}: {error_text}")
-                    return None
-            
-        except asyncio.TimeoutError:
-            logger.error("LLM API request timed out")
-            return None
         except Exception as e:
             logger.error(f"Failed to generate summary: {e}")
             return None
@@ -183,16 +160,17 @@ class LLMService:
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit - cleanup session"""
-        await self._close_session()
+        """Async context manager exit - cleanup resources"""
+        if self.client:
+            await self.client.close()
 
 
 # Global instance
 _llm_service = None
 
-def get_llm_service(endpoint_url: Optional[str] = None, model_name: Optional[str] = None, api_key: Optional[str] = None) -> LLMService:
+def get_llm_service(api_key: Optional[str] = None, model_name: Optional[str] = None, base_url: Optional[str] = None) -> LLMService:
     """Get or create LLM service instance"""
     global _llm_service
     if _llm_service is None:
-        _llm_service = LLMService(endpoint_url, model_name, api_key)
+        _llm_service = LLMService(api_key, model_name, base_url)
     return _llm_service
