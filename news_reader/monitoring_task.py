@@ -10,6 +10,8 @@ from telethon import TelegramClient, events, utils
 from colorama import Fore
 from news_reader.logging_config import get_logger
 from news_reader.db_client import get_db_client
+from news_reader.llm_service import get_llm_service
+from news_reader.config import Config
 
 logger = get_logger(__name__)
 
@@ -20,6 +22,7 @@ class MonitoringTask:
         self.running = False
         self.gui_logger = gui_logger  # Reference to GUI logger (TextualCLITask)
         self.db_client = get_db_client()  # Database client for saving messages
+        self.llm_service = get_llm_service()  # LLM service for message summarization
         self.hourly_task = None  # Task for hourly message processing
     
     def log_to_gui(self, message: str) -> None:
@@ -62,7 +65,7 @@ class MonitoringTask:
                 # Format message for GUI display
                 message_text = event.text[:200] + ('...' if len(event.text) > 200 else '') if event.text else '[No text]'
                 
-                # Save message to database
+                # Prepare message data
                 message_data = {
                     'message_id': event.id,
                     'chat_id': chat.id,
@@ -72,6 +75,19 @@ class MonitoringTask:
                     'message_text': event.text or '[No text]',
                     'timestamp': timestamp
                 }
+                
+                # Generate LLM summary if service is available
+                summary = None
+                if self.llm_service.is_available() and event.text and len(event.text.strip()) > 10:
+                    try:
+                        summary = await self.llm_service.summarize_message(message_data)
+                        if summary:
+                            message_data['llm_summary'] = summary
+                            message_data['summary_generated_at'] = datetime.now().isoformat()
+                            self.log_to_gui(f"[green]🤖 Generated LLM summary for message from {sender_name}[/green]")
+                    except Exception as llm_error:
+                        logger.error(f"Failed to generate LLM summary: {llm_error}")
+                        self.log_to_gui(f"[red]❌ LLM summarization failed: {llm_error}[/red]")
                 
                 # Save to database
                 try:
@@ -85,6 +101,11 @@ class MonitoringTask:
                     f"[blue]💬 Chat: {chat_name} (ID: {chat.id})[/blue]\n"
                     f"[white]📝 Message: {message_text}[/white]\n"
                 )
+                
+                # Add summary to log if available
+                if summary:
+                    summary_preview = summary[:150] + ('...' if len(summary) > 150 else '')
+                    log_message += f"[green]🤖 Summary: {summary_preview}[/green]\n"
                 
                 self.log_to_gui(log_message)
                 
@@ -158,6 +179,11 @@ class MonitoringTask:
                             f"[white]📝 Message: {msg.get('message_text', '[No text]')[:200]}{'...' if len(msg.get('message_text', '')) > 200 else ''}[/white]\n"
                             f"[dim]🕒 Received: {msg.get('timestamp', 'Unknown')}[/dim]\n"
                         )
+                        
+                        # Add summary if available
+                        if msg.get('llm_summary'):
+                            summary_preview = msg['llm_summary'][:150] + ('...' if len(msg['llm_summary']) > 150 else '')
+                            log_entry += f"[green]🤖 Summary: {summary_preview}[/green]\n"
                         
                         # Log to both GUI and file
                         self.log_to_gui(log_entry)

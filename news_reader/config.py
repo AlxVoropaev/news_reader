@@ -11,6 +11,11 @@ class Config:
     PHONE_NUMBER = os.getenv('PHONE_NUMBER', '')
     SESSION_NAME = os.getenv('SESSION_NAME', '')
     
+    # Custom LLM API configuration
+    LLM_ENDPOINT_URL = os.getenv('LLM_ENDPOINT_URL', '')
+    LLM_MODEL_NAME = os.getenv('LLM_MODEL_NAME', '')
+    LLM_API_KEY = os.getenv('LLM_API_KEY', '')
+    
     @classmethod
     def validate(cls):
         """Validate required configuration"""

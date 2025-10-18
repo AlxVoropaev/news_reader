@@ -237,7 +237,9 @@ class TinyDBClient:
                 "sender_name": message_data.get('sender_name'),
                 "message_text": message_data.get('message_text'),
                 "timestamp": message_data.get('timestamp'),
-                "received_at": datetime.now().isoformat()
+                "received_at": datetime.now().isoformat(),
+                "llm_summary": message_data.get('llm_summary'),  # Store LLM summary
+                "summary_generated_at": message_data.get('summary_generated_at')  # When summary was created
             }
             
             self.db.insert(message_record)
@@ -270,6 +272,44 @@ class TinyDBClient:
         except Exception as e:
             logger.error(f"Failed to clear incoming messages: {e}")
             return False
+    
+    def update_message_summary(self, message_id: int, summary: str) -> bool:
+        """Update a message with its LLM-generated summary"""
+        try:
+            # Find and update the message
+            updated = self.db.update(
+                {
+                    'llm_summary': summary,
+                    'summary_generated_at': datetime.now().isoformat()
+                },
+                (self.Query.type == "incoming_message") & 
+                (self.Query.message_id == message_id)
+            )
+            
+            if updated:
+                logger.debug(f"Updated message {message_id} with LLM summary")
+                return True
+            else:
+                logger.warning(f"No message found with ID {message_id} to update")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to update message summary: {e}")
+            return False
+    
+    def get_messages_without_summary(self) -> List[Dict[str, Any]]:
+        """Get all incoming messages that don't have LLM summaries yet"""
+        try:
+            messages = self.db.search(
+                (self.Query.type == "incoming_message") & 
+                (~self.Query.llm_summary.exists() | (self.Query.llm_summary == None))
+            )
+            logger.info(f"Found {len(messages)} messages without summaries")
+            return messages
+            
+        except Exception as e:
+            logger.error(f"Failed to get messages without summaries: {e}")
+            return []
 
 def get_db_client() -> TinyDBClient:
     """Get database client instance"""
