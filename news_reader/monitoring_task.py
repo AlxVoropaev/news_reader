@@ -25,7 +25,6 @@ class MonitoringTask:
         self.db_client = get_db_client()  # Database client for saving messages
         self.llm_service = get_llm_service()  # LLM service for message summarization
         self.channel_sender = get_channel_sender(client)  # Channel sender for SINK_CHANNEL
-        self.hourly_task = None  # Task for hourly message processing
     
     def log_to_gui(self, message: str) -> None:
         """Send log message to GUI if available, otherwise use logger"""
@@ -36,6 +35,122 @@ class MonitoringTask:
                 logger.error(f"Failed to send message to GUI: {e}")
         else:
             logger.info(message)
+    
+    async def _process_message_by_algorithm(self, message_data: dict, message_text: str) -> None:
+        """
+        Process message according to the specified algorithm:
+        1. Classify the post type using LLM and classify.txt prompt
+        2. If SUMMARY type - forward as is to sink channel
+        3. If INTERESTING - send summary to sink channel. If small (< 30 chars) - forward as is
+        4. If REST - do nothing
+        """
+        if not message_text or len(message_text.strip()) == 0:
+            self.log_to_gui(f"[yellow]⚠️ Empty message - skipping processing[/yellow]")
+            return
+        
+        sender_name = message_data.get('sender_name', 'Unknown')
+        
+        # Step 1: Classify the post type
+        classification = None
+        if self.llm_service.is_available():
+            try:
+                classification = await self.llm_service.classify_message(message_text)
+                if classification:
+                    self.log_to_gui(f"[cyan]🏷️ Classified message from {sender_name} as: {classification}[/cyan]")
+                    message_data['classification'] = classification
+                    message_data['classification_generated_at'] = datetime.now().isoformat()
+                else:
+                    self.log_to_gui(f"[yellow]⚠️ Failed to classify message from {sender_name}[/yellow]")
+                    classification = "REST"  # Default to REST if classification fails
+            except Exception as e:
+                logger.error(f"Error classifying message: {e}")
+                self.log_to_gui(f"[red]❌ Classification failed: {e}[/red]")
+                classification = "REST"  # Default to REST on error
+        else:
+            self.log_to_gui(f"[yellow]⚠️ LLM service not available - defaulting to REST[/yellow]")
+            classification = "REST"
+        
+        # Step 2-4: Process based on classification
+        if classification == "SUMMARY":
+            # Forward as is to sink channel
+            await self._handle_summary_post(message_data, message_text)
+        elif classification == "INTERESTING":
+            # Send summary or forward if small
+            await self._handle_interesting_post(message_data, message_text)
+        else:  # REST
+            # Do nothing
+            await self._handle_rest_post(message_data)
+    
+    async def _handle_summary_post(self, message_data: dict, message_text: str) -> None:
+        """Handle SUMMARY type posts - forward as is to sink channel"""
+        sender_name = message_data.get('sender_name', 'Unknown')
+        
+        if not self.channel_sender or not self.channel_sender.is_configured():
+            self.log_to_gui(f"[yellow]⚠️ SINK_CHANNEL not configured - cannot forward SUMMARY post[/yellow]")
+            return
+        
+        try:
+            sent_successfully = await self.channel_sender.forward_message_to_sink_channel(message_text, message_data)
+            if sent_successfully:
+                self.log_to_gui(f"[green]📤 Forwarded SUMMARY post from {sender_name} to SINK_CHANNEL[/green]")
+                logger.info(f"Successfully forwarded SUMMARY post from {sender_name} to SINK_CHANNEL")
+            else:
+                self.log_to_gui(f"[yellow]⚠️ Failed to forward SUMMARY post from {sender_name}[/yellow]")
+        except Exception as e:
+            logger.error(f"Error forwarding SUMMARY post: {e}")
+            self.log_to_gui(f"[red]❌ Error forwarding SUMMARY post: {e}[/red]")
+    
+    async def _handle_interesting_post(self, message_data: dict, message_text: str) -> None:
+        """Handle INTERESTING type posts - summarize or forward if small (< 30 chars)"""
+        sender_name = message_data.get('sender_name', 'Unknown')
+        
+        if not self.channel_sender or not self.channel_sender.is_configured():
+            self.log_to_gui(f"[yellow]⚠️ SINK_CHANNEL not configured - cannot process INTERESTING post[/yellow]")
+            return
+        
+        # Check if message is small (less than 30 characters)
+        if len(message_text.strip()) < 30:
+            # Forward as is
+            try:
+                sent_successfully = await self.channel_sender.forward_message_to_sink_channel(message_text, message_data)
+                if sent_successfully:
+                    self.log_to_gui(f"[green]📤 Forwarded small INTERESTING post from {sender_name} to SINK_CHANNEL[/green]")
+                    logger.info(f"Successfully forwarded small INTERESTING post from {sender_name} to SINK_CHANNEL")
+                else:
+                    self.log_to_gui(f"[yellow]⚠️ Failed to forward small INTERESTING post from {sender_name}[/yellow]")
+            except Exception as e:
+                logger.error(f"Error forwarding small INTERESTING post: {e}")
+                self.log_to_gui(f"[red]❌ Error forwarding small INTERESTING post: {e}[/red]")
+        else:
+            # Generate summary and send it
+            if self.llm_service.is_available():
+                try:
+                    summary = await self.llm_service.summarize_message(message_data)
+                    if summary:
+                        message_data['llm_summary'] = summary
+                        message_data['summary_generated_at'] = datetime.now().isoformat()
+                        self.log_to_gui(f"[green]🤖 Generated summary for INTERESTING post from {sender_name}[/green]")
+                        
+                        # Send summary to SINK_CHANNEL
+                        sent_successfully = await self.channel_sender.send_summary_to_sink_channel(summary, message_data)
+                        if sent_successfully:
+                            self.log_to_gui(f"[green]📤 Sent INTERESTING post summary from {sender_name} to SINK_CHANNEL[/green]")
+                            logger.info(f"Successfully sent INTERESTING post summary from {sender_name} to SINK_CHANNEL")
+                        else:
+                            self.log_to_gui(f"[yellow]⚠️ Failed to send INTERESTING post summary from {sender_name}[/yellow]")
+                    else:
+                        self.log_to_gui(f"[yellow]⚠️ Failed to generate summary for INTERESTING post from {sender_name}[/yellow]")
+                except Exception as e:
+                    logger.error(f"Error processing INTERESTING post: {e}")
+                    self.log_to_gui(f"[red]❌ Error processing INTERESTING post: {e}[/red]")
+            else:
+                self.log_to_gui(f"[yellow]⚠️ LLM service not available - cannot summarize INTERESTING post[/yellow]")
+    
+    async def _handle_rest_post(self, message_data: dict) -> None:
+        """Handle REST type posts - do nothing"""
+        sender_name = message_data.get('sender_name', 'Unknown')
+        self.log_to_gui(f"[dim]🚫 REST post from {sender_name} - no action taken[/dim]")
+        logger.debug(f"REST post from {sender_name} - no action taken")
     
     async def start(self):
         """Start monitoring for new messages"""
@@ -102,30 +217,8 @@ class MonitoringTask:
                     'message_link': message_link
                 }
                 
-                # Generate LLM summary if service is available
-                summary = None
-                if self.llm_service.is_available() and event.text and len(event.text.strip()) > 10:
-                    try:
-                        summary = await self.llm_service.summarize_message(message_data)
-                        if summary:
-                            message_data['llm_summary'] = summary
-                            message_data['summary_generated_at'] = datetime.now().isoformat()
-                            self.log_to_gui(f"[green]🤖 Generated LLM summary for message from {sender_name}[/green]")
-                            
-                            # Send summary to SINK_CHANNEL if configured
-                            try:
-                                sent_successfully = await self.channel_sender.send_summary_to_sink_channel(summary, message_data)
-                                if sent_successfully:
-                                    self.log_to_gui(f"[green]📤 Sent summary to SINK_CHANNEL[/green]")
-                                    logger.info(f"Successfully sent summary to SINK_CHANNEL for message from {sender_name}")
-                                else:
-                                    self.log_to_gui(f"[yellow]⚠️ Failed to send summary to SINK_CHANNEL[/yellow]")
-                            except Exception as channel_error:
-                                logger.error(f"Error sending summary to SINK_CHANNEL: {channel_error}")
-                                self.log_to_gui(f"[red]❌ Error sending to SINK_CHANNEL: {channel_error}[/red]")
-                    except Exception as llm_error:
-                        logger.error(f"Failed to generate LLM summary: {llm_error}")
-                        self.log_to_gui(f"[red]❌ LLM summarization failed: {llm_error}[/red]")
+                # Process message according to the algorithm
+                await self._process_message_by_algorithm(message_data, event.text or '')
                 
                 # Save to database
                 try:
@@ -140,11 +233,6 @@ class MonitoringTask:
                     f"[white]📝 Message: {message_text}[/white]\n"
                 )
                 
-                # Add summary to log if available
-                if summary:
-                    summary_preview = summary[:150] + ('...' if len(summary) > 150 else '')
-                    log_message += f"[green]🤖 Summary: {summary_preview}[/green]\n"
-                
                 self.log_to_gui(log_message)
                 
             except Exception as e:
@@ -156,9 +244,6 @@ class MonitoringTask:
         # Keep monitoring running
         self.running = True
         
-        # Start hourly message processing task
-        self.hourly_task = asyncio.create_task(self.process_hourly_messages())
-        logger.info("Started hourly message processing task")
         
         try:
             while self.running:
@@ -166,84 +251,14 @@ class MonitoringTask:
         except asyncio.CancelledError:
             logger.info("Monitoring task cancelled")
         finally:
-            # Cancel hourly task if it's running
-            if self.hourly_task and not self.hourly_task.done():
-                self.hourly_task.cancel()
-                try:
-                    await self.hourly_task
-                except asyncio.CancelledError:
-                    logger.info("Hourly processing task cancelled")
+            pass
     
     def stop(self):
         """Stop monitoring"""
         self.running = False
         
-        # Cancel hourly task if it exists
-        if self.hourly_task and not self.hourly_task.done():
-            self.hourly_task.cancel()
-            logger.info("Cancelled hourly processing task")
     
     def update_channels(self, channels: List[int]):
         """Update monitored channels"""
         self.monitored_channels = channels
     
-    async def process_hourly_messages(self):
-        """Process messages from database every hour - log them and remove them"""
-        while self.running:
-            try:
-                # Wait for one hour (3600 seconds)
-                await asyncio.sleep(3600)
-                
-                if not self.running:
-                    break
-                
-                # Fetch all incoming messages from database
-                messages = self.db_client.get_all_incoming_messages()
-                
-                if messages:
-                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    
-                    # Log summary
-                    summary_message = f"[green]📊 [{timestamp}] Hourly Message Summary - Processing {len(messages)} messages[/green]"
-                    self.log_to_gui(summary_message)
-                    logger.info(f"Processing {len(messages)} messages from database")
-                    
-                    # Log each message
-                    for i, msg in enumerate(messages, 1):
-                        log_entry = (
-                            f"[cyan]📨 Message {i}/{len(messages)}[/cyan]\n"
-                            f"[yellow]👤 From: {msg.get('sender_name', 'Unknown')}[/yellow]\n"
-                            f"[blue]💬 Chat: {msg.get('chat_name', 'Unknown')} (ID: {msg.get('chat_id', 'Unknown')})[/blue]\n"
-                            f"[white]📝 Message: {msg.get('message_text', '[No text]')[:200]}{'...' if len(msg.get('message_text', '')) > 200 else ''}[/white]\n"
-                            f"[dim]🕒 Received: {msg.get('timestamp', 'Unknown')}[/dim]\n"
-                        )
-                        
-                        # Add summary if available
-                        if msg.get('llm_summary'):
-                            summary_preview = msg['llm_summary'][:150] + ('...' if len(msg['llm_summary']) > 150 else '')
-                            log_entry += f"[green]🤖 Summary: {summary_preview}[/green]\n"
-                        
-                        # Log to both GUI and file
-                        self.log_to_gui(log_entry)
-                        logger.info(f"Message from {msg.get('sender_name')} in {msg.get('chat_name')}: {msg.get('message_text', '')[:100]}")
-                    
-                    # Clear messages from database
-                    if self.db_client.clear_incoming_messages():
-                        completion_message = f"[green]✅ [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Successfully processed and cleared {len(messages)} messages[/green]"
-                        self.log_to_gui(completion_message)
-                        logger.info(f"Successfully processed and cleared {len(messages)} messages from database")
-                    else:
-                        error_message = f"[red]❌ [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Failed to clear messages from database[/red]"
-                        self.log_to_gui(error_message)
-                        logger.error("Failed to clear messages from database")
-                else:
-                    # No messages to process
-                    logger.debug("No messages to process in hourly check")
-                    
-            except asyncio.CancelledError:
-                logger.info("Hourly message processing task cancelled")
-                break
-            except Exception as e:
-                logger.error(f"Error in hourly message processing: {e}")
-                error_message = f"[red]❌ Error in hourly processing: {e}[/red]"
-                self.log_to_gui(error_message)

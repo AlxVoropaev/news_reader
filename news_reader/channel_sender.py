@@ -71,6 +71,48 @@ class ChannelSender:
             logger.error(f"Failed to send summary to SINK_CHANNEL ({self.sink_channel}): {e}")
             return False
     
+    async def forward_message_to_sink_channel(self, message_text: str, original_message_data: dict) -> bool:
+        """
+        Forward a message as-is to the configured SINK_CHANNEL
+        
+        Args:
+            message_text: The original message text to forward
+            original_message_data: Dictionary containing original message information
+        
+        Returns:
+            True if message was sent successfully, False otherwise
+        """
+        if not self.is_configured():
+            logger.warning("SINK_CHANNEL not configured - skipping message forwarding")
+            return False
+        
+        if not self.client or not self.client.is_connected():
+            logger.error("Telegram client not connected - cannot forward message")
+            return False
+        
+        try:
+            # Format the forwarded message
+            formatted_message = self._format_forwarded_message(message_text, original_message_data)
+            
+            # Send the message to SINK_CHANNEL
+            await self.client.send_message(self.sink_channel, formatted_message)
+            
+            logger.info(f"Successfully forwarded message to SINK_CHANNEL ({self.sink_channel})")
+            return True
+            
+        except ChannelPrivateError:
+            logger.error(f"Cannot forward to SINK_CHANNEL ({self.sink_channel}): Channel is private or bot is not a member")
+            return False
+        except ChatWriteForbiddenError:
+            logger.error(f"Cannot forward to SINK_CHANNEL ({self.sink_channel}): No permission to write to this channel")
+            return False
+        except FloodWaitError as e:
+            logger.warning(f"Rate limited when forwarding to SINK_CHANNEL: must wait {e.seconds} seconds")
+            return False
+        except Exception as e:
+            logger.error(f"Failed to forward message to SINK_CHANNEL ({self.sink_channel}): {e}")
+            return False
+    
     def _format_summary_message(self, summary: str, original_message_data: dict) -> str:
         """
         Format the summary message for sending to SINK_CHANNEL
@@ -89,6 +131,26 @@ class ChannelSender:
         
         # Create a formatted summary message
         formatted_message = f"**Source:** {chat_name} \n\n{summary} \n\n [Original Message]({message_link})"
+
+        return formatted_message
+    
+    def _format_forwarded_message(self, message_text: str, original_message_data: dict) -> str:
+        """
+        Format the forwarded message for sending to SINK_CHANNEL
+        
+        Args:
+            message_text: The original message text
+            original_message_data: Original message metadata
+        
+        Returns:
+            Formatted message string
+        """
+        chat_name = original_message_data.get('chat_name', 'Unknown Channel')
+        sender_name = original_message_data.get('sender_name', 'Unknown Sender')
+        message_link = original_message_data.get('message_link', '')
+        
+        # Create a formatted forwarded message
+        formatted_message = f"**Source:** {chat_name}\n\n{message_text}\n\n[Original Message]({message_link})"
 
         return formatted_message
     

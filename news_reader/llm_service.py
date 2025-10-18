@@ -37,8 +37,7 @@ class LLMService:
             
             self.client = AsyncOpenAI(**client_kwargs)
         
-        # Load summarization prompt
-        self.prompt_template = self._load_prompt_template()
+        # Prompts will be loaded dynamically on each use
     
     def _load_prompt_template(self) -> str:
         """Load the summarization prompt template from file"""
@@ -48,7 +47,7 @@ class LLMService:
             if os.path.exists(prompt_path):
                 with open(prompt_path, 'r', encoding='utf-8') as f:
                     template = f.read().strip()
-                logger.info("Loaded summarization prompt template")
+                logger.debug("Reloaded summarization prompt template from file")
                 return template
             else:
                 logger.error(f"Prompt template not found at {prompt_path}")
@@ -56,6 +55,24 @@ class LLMService:
                 
         except Exception as e:
             logger.error(f"Failed to load prompt template: {e}")
+            raise
+    
+    def _load_classify_prompt_template(self) -> str:
+        """Load the classification prompt template from file"""
+        try:
+            prompt_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'prompts', 'classify.txt')
+            
+            if os.path.exists(prompt_path):
+                with open(prompt_path, 'r', encoding='utf-8') as f:
+                    template = f.read().strip()
+                logger.debug("Reloaded classification prompt template from file")
+                return template
+            else:
+                logger.error(f"Classification prompt template not found at {prompt_path}")
+                raise FileNotFoundError(f"Required classification prompt template not found at {prompt_path}")
+                
+        except Exception as e:
+            logger.error(f"Failed to load classification prompt template: {e}")
             raise
     
     def is_available(self) -> bool:
@@ -82,8 +99,11 @@ class LLMService:
             return None
         
         try:
+            # Load prompt template fresh from file
+            prompt_template = self._load_prompt_template()
+            
             # Prepare the prompt with message data
-            prompt = self.prompt_template.format(
+            prompt = prompt_template.format(
                 message_text=message_data.get('message_text', ''),
                 channel_name=message_data.get('chat_name', 'Unknown'),
                 sender_name=message_data.get('sender_name', 'Unknown'),
@@ -118,6 +138,63 @@ class LLMService:
         except Exception as e:
             logger.error(f"Failed to generate summary: {e}")
             return None
+    
+    async def classify_message(self, message_text: str) -> Optional[str]:
+        """
+        Classify a message using OpenAI API
+        
+        Args:
+            message_text: The text content to classify
+        
+        Returns:
+            Classification string ("SUMMARY", "INTERESTING", or "REST") or None if processing failed
+        """
+        if not self.is_available():
+            logger.warning("LLM service not available - skipping classification")
+            return None
+        
+        if not message_text or len(message_text.strip()) == 0:
+            logger.warning("Empty message text - skipping classification")
+            return "REST"
+        
+        try:
+            # Load classification prompt template fresh from file
+            classify_prompt_template = self._load_classify_prompt_template()
+            
+            # Prepare the prompt with message text
+            prompt = classify_prompt_template + "\n" + message_text
+            
+            # Make the API request using OpenAI client
+            response = await self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": "You are a text classifier. Respond with only one word: SUMMARY, INTERESTING, or REST."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=10,
+                temperature=0.0,  # Use 0 temperature for consistent classification
+                timeout=30.0  # 30 second timeout for classification
+            )
+            
+            # Extract classification from response
+            if response.choices and len(response.choices) > 0:
+                classification = response.choices[0].message.content.strip().upper()
+                
+                # Validate classification result
+                valid_classifications = ["SUMMARY", "INTERESTING", "REST"]
+                if classification in valid_classifications:
+                    logger.info(f"Successfully classified message as: {classification}")
+                    return classification
+                else:
+                    logger.warning(f"Invalid classification result: {classification}, defaulting to REST")
+                    return "REST"
+            else:
+                logger.error("No choices returned in OpenAI classification response")
+                return "REST"
+            
+        except Exception as e:
+            logger.error(f"Failed to classify message: {e}")
+            return "REST"  # Default to REST on error
     
     async def batch_summarize_messages(self, messages: list[Dict[str, Any]]) -> Dict[str, str]:
         """

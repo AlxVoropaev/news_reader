@@ -23,11 +23,13 @@ fi
 
 if [ $# -eq 0 ]; then
     echo "🚀 Starting News Reader Application..."
-    python news_reader/main.py
+    cd "$SCRIPT_DIR"
+    python -m news_reader.main
 else
     if [ "$1" = "app" ] || [ "$1" = "start" ]; then
         echo "🚀 Starting News Reader Application..."
-        python news_reader/main.py
+        cd "$SCRIPT_DIR"
+        python -m news_reader.main
     else
         echo "❌ Unknown command: $1"
         echo "Available commands:"
