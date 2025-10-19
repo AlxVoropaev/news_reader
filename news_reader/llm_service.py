@@ -37,7 +37,11 @@ class LLMService:
             
             self.client = AsyncOpenAI(**client_kwargs)
         
-        # Prompts will be loaded dynamically on each use
+        # Load summarization prompt
+        self.prompt_template = self._load_prompt_template()
+        
+        # Load classification prompt
+        self.classify_prompt_template = self._load_classify_prompt_template()
     
     def _load_prompt_template(self) -> str:
         """Load the summarization prompt template from file"""
@@ -47,7 +51,7 @@ class LLMService:
             if os.path.exists(prompt_path):
                 with open(prompt_path, 'r', encoding='utf-8') as f:
                     template = f.read().strip()
-                logger.debug("Reloaded summarization prompt template from file")
+                logger.info("Loaded summarization prompt template")
                 return template
             else:
                 logger.error(f"Prompt template not found at {prompt_path}")
@@ -65,7 +69,7 @@ class LLMService:
             if os.path.exists(prompt_path):
                 with open(prompt_path, 'r', encoding='utf-8') as f:
                     template = f.read().strip()
-                logger.debug("Reloaded classification prompt template from file")
+                logger.info("Loaded classification prompt template")
                 return template
             else:
                 logger.error(f"Classification prompt template not found at {prompt_path}")
@@ -99,11 +103,8 @@ class LLMService:
             return None
         
         try:
-            # Load prompt template fresh from file
-            prompt_template = self._load_prompt_template()
-            
             # Prepare the prompt with message data
-            prompt = prompt_template.format(
+            prompt = self.prompt_template.format(
                 message_text=message_data.get('message_text', ''),
                 channel_name=message_data.get('chat_name', 'Unknown'),
                 sender_name=message_data.get('sender_name', 'Unknown'),
@@ -158,11 +159,8 @@ class LLMService:
             return "REST"
         
         try:
-            # Load classification prompt template fresh from file
-            classify_prompt_template = self._load_classify_prompt_template()
-            
             # Prepare the prompt with message text
-            prompt = classify_prompt_template + "\n" + message_text
+            prompt = self.classify_prompt_template + "\n" + message_text
             
             # Make the API request using OpenAI client
             response = await self.client.chat.completions.create(
@@ -195,42 +193,6 @@ class LLMService:
         except Exception as e:
             logger.error(f"Failed to classify message: {e}")
             return "REST"  # Default to REST on error
-    
-    async def batch_summarize_messages(self, messages: list[Dict[str, Any]]) -> Dict[str, str]:
-        """
-        Summarize multiple messages in batch
-        
-        Args:
-            messages: List of message data dictionaries
-        
-        Returns:
-            Dictionary mapping message IDs to their summaries
-        """
-        if not self.is_available():
-            logger.warning("LLM service not available - skipping batch summarization")
-            return {}
-        
-        summaries = {}
-        
-        # Process messages with rate limiting (to avoid API limits)
-        for i, message in enumerate(messages):
-            try:
-                message_id = str(message.get('message_id', f'unknown_{i}'))
-                summary = await self.summarize_message(message)
-                
-                if summary:
-                    summaries[message_id] = summary
-                
-                # Add small delay to avoid rate limiting
-                if i < len(messages) - 1:  # Don't delay after the last message
-                    await asyncio.sleep(0.5)  # 500ms delay between requests
-                    
-            except Exception as e:
-                logger.error(f"Failed to summarize message {i}: {e}")
-                continue
-        
-        logger.info(f"Successfully generated {len(summaries)} summaries out of {len(messages)} messages")
-        return summaries
     
     async def __aenter__(self):
         """Async context manager entry"""

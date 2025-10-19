@@ -13,28 +13,19 @@ from news_reader.db_client import get_db_client
 from news_reader.llm_service import get_llm_service
 from news_reader.channel_sender import get_channel_sender
 from news_reader.config import Config
+from news_reader.message_utils import get_sender_name, get_current_timestamp, format_message_for_display, create_telegram_message_link
 
 logger = get_logger(__name__)
 
 class MonitoringTask:
-    def __init__(self, client: TelegramClient, monitored_channels: List[int], gui_logger=None):
+    def __init__(self, client: TelegramClient, monitored_channels: List[int]):
         self.client = client
         self.monitored_channels = monitored_channels
         self.running = False
-        self.gui_logger = gui_logger  # Reference to GUI logger (TextualCLITask)
         self.db_client = get_db_client()  # Database client for saving messages
         self.llm_service = get_llm_service()  # LLM service for message summarization
         self.channel_sender = get_channel_sender(client)  # Channel sender for SINK_CHANNEL
     
-    def log_to_gui(self, message: str) -> None:
-        """Send log message to GUI if available, otherwise use logger"""
-        if self.gui_logger:
-            try:
-                self.gui_logger.add_log_message(message)
-            except Exception as e:
-                logger.error(f"Failed to send message to GUI: {e}")
-        else:
-            logger.info(message)
     
     async def _process_message_by_algorithm(self, message_data: dict, message_text: str) -> None:
         """
@@ -45,10 +36,10 @@ class MonitoringTask:
         4. If REST - do nothing
         """
         if not message_text or len(message_text.strip()) == 0:
-            self.log_to_gui(f"[yellow]⚠️ Empty message - skipping processing[/yellow]")
+            logger.warning("Empty message - skipping processing")
             return
         
-        sender_name = message_data.get('sender_name', 'Unknown')
+        sender_name = get_sender_name(message_data)
         
         # Step 1: Classify the post type
         classification = None
@@ -56,18 +47,17 @@ class MonitoringTask:
             try:
                 classification = await self.llm_service.classify_message(message_text)
                 if classification:
-                    self.log_to_gui(f"[cyan]🏷️ Classified message from {sender_name} as: {classification}[/cyan]")
+                    logger.info(f"Classified message from {sender_name} as: {classification}")
                     message_data['classification'] = classification
-                    message_data['classification_generated_at'] = datetime.now().isoformat()
+                    message_data['classification_generated_at'] = get_current_timestamp()
                 else:
-                    self.log_to_gui(f"[yellow]⚠️ Failed to classify message from {sender_name}[/yellow]")
+                    logger.warning(f"Failed to classify message from {sender_name}")
                     classification = "REST"  # Default to REST if classification fails
             except Exception as e:
                 logger.error(f"Error classifying message: {e}")
-                self.log_to_gui(f"[red]❌ Classification failed: {e}[/red]")
                 classification = "REST"  # Default to REST on error
         else:
-            self.log_to_gui(f"[yellow]⚠️ LLM service not available - defaulting to REST[/yellow]")
+            logger.warning("LLM service not available - defaulting to REST")
             classification = "REST"
         
         # Step 2-4: Process based on classification
@@ -83,29 +73,27 @@ class MonitoringTask:
     
     async def _handle_summary_post(self, message_data: dict, message_text: str) -> None:
         """Handle SUMMARY type posts - forward as is to sink channel"""
-        sender_name = message_data.get('sender_name', 'Unknown')
+        sender_name = get_sender_name(message_data)
         
         if not self.channel_sender or not self.channel_sender.is_configured():
-            self.log_to_gui(f"[yellow]⚠️ SINK_CHANNEL not configured - cannot forward SUMMARY post[/yellow]")
+            logger.warning("SINK_CHANNEL not configured - cannot forward SUMMARY post")
             return
         
         try:
             sent_successfully = await self.channel_sender.forward_message_to_sink_channel(message_text, message_data)
             if sent_successfully:
-                self.log_to_gui(f"[green]📤 Forwarded SUMMARY post from {sender_name} to SINK_CHANNEL[/green]")
                 logger.info(f"Successfully forwarded SUMMARY post from {sender_name} to SINK_CHANNEL")
             else:
-                self.log_to_gui(f"[yellow]⚠️ Failed to forward SUMMARY post from {sender_name}[/yellow]")
+                logger.warning(f"Failed to forward SUMMARY post from {sender_name}")
         except Exception as e:
             logger.error(f"Error forwarding SUMMARY post: {e}")
-            self.log_to_gui(f"[red]❌ Error forwarding SUMMARY post: {e}[/red]")
     
     async def _handle_interesting_post(self, message_data: dict, message_text: str) -> None:
         """Handle INTERESTING type posts - summarize or forward if small (< 30 chars)"""
-        sender_name = message_data.get('sender_name', 'Unknown')
+        sender_name = get_sender_name(message_data)
         
         if not self.channel_sender or not self.channel_sender.is_configured():
-            self.log_to_gui(f"[yellow]⚠️ SINK_CHANNEL not configured - cannot process INTERESTING post[/yellow]")
+            logger.warning("SINK_CHANNEL not configured - cannot process INTERESTING post")
             return
         
         # Check if message is small (less than 30 characters)
@@ -114,13 +102,11 @@ class MonitoringTask:
             try:
                 sent_successfully = await self.channel_sender.forward_message_to_sink_channel(message_text, message_data)
                 if sent_successfully:
-                    self.log_to_gui(f"[green]📤 Forwarded small INTERESTING post from {sender_name} to SINK_CHANNEL[/green]")
                     logger.info(f"Successfully forwarded small INTERESTING post from {sender_name} to SINK_CHANNEL")
                 else:
-                    self.log_to_gui(f"[yellow]⚠️ Failed to forward small INTERESTING post from {sender_name}[/yellow]")
+                    logger.warning(f"Failed to forward small INTERESTING post from {sender_name}")
             except Exception as e:
                 logger.error(f"Error forwarding small INTERESTING post: {e}")
-                self.log_to_gui(f"[red]❌ Error forwarding small INTERESTING post: {e}[/red]")
         else:
             # Generate summary and send it
             if self.llm_service.is_available():
@@ -128,28 +114,25 @@ class MonitoringTask:
                     summary = await self.llm_service.summarize_message(message_data)
                     if summary:
                         message_data['llm_summary'] = summary
-                        message_data['summary_generated_at'] = datetime.now().isoformat()
-                        self.log_to_gui(f"[green]🤖 Generated summary for INTERESTING post from {sender_name}[/green]")
+                        message_data['summary_generated_at'] = get_current_timestamp()
+                        logger.info(f"Generated summary for INTERESTING post from {sender_name}")
                         
                         # Send summary to SINK_CHANNEL
                         sent_successfully = await self.channel_sender.send_summary_to_sink_channel(summary, message_data)
                         if sent_successfully:
-                            self.log_to_gui(f"[green]📤 Sent INTERESTING post summary from {sender_name} to SINK_CHANNEL[/green]")
                             logger.info(f"Successfully sent INTERESTING post summary from {sender_name} to SINK_CHANNEL")
                         else:
-                            self.log_to_gui(f"[yellow]⚠️ Failed to send INTERESTING post summary from {sender_name}[/yellow]")
+                            logger.warning(f"Failed to send INTERESTING post summary from {sender_name}")
                     else:
-                        self.log_to_gui(f"[yellow]⚠️ Failed to generate summary for INTERESTING post from {sender_name}[/yellow]")
+                        logger.warning(f"Failed to generate summary for INTERESTING post from {sender_name}")
                 except Exception as e:
                     logger.error(f"Error processing INTERESTING post: {e}")
-                    self.log_to_gui(f"[red]❌ Error processing INTERESTING post: {e}[/red]")
             else:
-                self.log_to_gui(f"[yellow]⚠️ LLM service not available - cannot summarize INTERESTING post[/yellow]")
+                logger.warning("LLM service not available - cannot summarize INTERESTING post")
     
     async def _handle_rest_post(self, message_data: dict) -> None:
         """Handle REST type posts - do nothing"""
-        sender_name = message_data.get('sender_name', 'Unknown')
-        self.log_to_gui(f"[dim]🚫 REST post from {sender_name} - no action taken[/dim]")
+        sender_name = get_sender_name(message_data)
         logger.debug(f"REST post from {sender_name} - no action taken")
     
     async def start(self):
@@ -165,16 +148,12 @@ class MonitoringTask:
             try:
                 success, message = await self.channel_sender.test_sink_channel_access()
                 if success:
-                    self.log_to_gui(f"[green]✅ SINK_CHANNEL test successful: {message}[/green]")
                     logger.info(f"SINK_CHANNEL test successful: {message}")
                 else:
-                    self.log_to_gui(f"[red]❌ SINK_CHANNEL test failed: {message}[/red]")
                     logger.warning(f"SINK_CHANNEL test failed: {message}")
             except Exception as e:
-                self.log_to_gui(f"[red]❌ Error testing SINK_CHANNEL: {e}[/red]")
                 logger.error(f"Error testing SINK_CHANNEL: {e}")
         else:
-            self.log_to_gui(f"[yellow]ℹ️ SINK_CHANNEL not configured - summaries will not be forwarded[/yellow]")
             logger.info("SINK_CHANNEL not configured - summaries will not be forwarded")
         
         # Register event handlers
@@ -197,13 +176,10 @@ class MonitoringTask:
                 chat_name = getattr(chat, 'title', getattr(chat, 'first_name', 'Private'))
                 
                 # Format message for GUI display
-                message_text = event.text[:200] + ('...' if len(event.text) > 200 else '') if event.text else '[No text]'
+                message_text = format_message_for_display(event.text)
                 
                 # Create message link
-                # For channels, use format: https://t.me/c/{chat_id_without_prefix}/{message_id}
-                # Remove the -100 prefix from channel IDs for the link
-                chat_id_for_link = str(chat.id)[4:] if str(chat.id).startswith('-100') else str(chat.id)
-                message_link = f"https://t.me/c/{chat_id_for_link}/{event.id}"
+                message_link = create_telegram_message_link(chat.id, event.id)
                 
                 # Prepare message data
                 message_data = {
@@ -233,13 +209,12 @@ class MonitoringTask:
                     f"[white]📝 Message: {message_text}[/white]\n"
                 )
                 
-                self.log_to_gui(log_message)
+                logger.info(f"New message from {sender_name} in {chat_name}: {message_text}")
                 
             except Exception as e:
                 logger.error(f"❌ Error handling message: {e}")
-                self.log_to_gui(f"[red]❌ Error handling message: {e}[/red]")
                 
-        self.log_to_gui(f"[green]📡 Monitoring started for {len(self.monitored_channels)} channels[/green]")
+        logger.info(f"Monitoring started for {len(self.monitored_channels)} channels")
         
         # Keep monitoring running
         self.running = True

@@ -7,6 +7,7 @@ from typing import List, Dict, Any
 import os
 from datetime import datetime
 from news_reader.logging_config import get_logger
+from news_reader.message_utils import get_current_timestamp
 
 logger = get_logger(__name__)
 
@@ -81,7 +82,7 @@ class TinyDBClient:
             config_data = {
                 "type": "monitoring_channels",
                 "channels": channels,
-                "updated_at": datetime.now().isoformat(),
+                "updated_at": get_current_timestamp(),
                 "updated_by": user
             }
             
@@ -159,7 +160,7 @@ class TinyDBClient:
             cache_data = {
                 "type": "cached_channels",
                 "channels": channels,
-                "cached_at": datetime.now().isoformat(),
+                "cached_at": get_current_timestamp(),
                 "cached_by": user
             }
             
@@ -238,7 +239,7 @@ class TinyDBClient:
                 "message_text": message_data.get('message_text'),
                 "timestamp": message_data.get('timestamp'),
                 "message_link": message_data.get('message_link'),  # Store message link
-                "received_at": datetime.now().isoformat(),
+                "received_at": get_current_timestamp(),
                 "llm_summary": message_data.get('llm_summary'),  # Store LLM summary
                 "summary_generated_at": message_data.get('summary_generated_at')  # When summary was created
             }
@@ -281,7 +282,7 @@ class TinyDBClient:
             updated = self.db.update(
                 {
                     'llm_summary': summary,
-                    'summary_generated_at': datetime.now().isoformat()
+                    'summary_generated_at': get_current_timestamp()
                 },
                 (self.Query.type == "incoming_message") & 
                 (self.Query.message_id == message_id)

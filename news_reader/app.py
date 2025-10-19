@@ -9,24 +9,23 @@ import aioconsole
 import getpass
 import logging
 import signal
-import sys
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from telethon import TelegramClient
-from telethon.sessions import StringSession
 from telethon.network.connection import ConnectionTcpFull
 from telethon.errors import SessionPasswordNeededError
 from news_reader.config import Config
 from news_reader.db_client import get_db_client
 from news_reader.monitoring_task import MonitoringTask
 from news_reader.textual_cli_task import TextualCLITask
-from colorama import init, Fore, Style
+from colorama import init, Fore
 
 # Initialize colorama for colored output
 init(autoreset=True)
 
 # Configure logging to write to file instead of console
 from news_reader.logging_config import setup_logging, get_logger
+from news_reader.message_utils import get_current_timestamp
 
 # Setup centralized logging
 setup_logging()
@@ -158,12 +157,12 @@ class NewsReaderApp:
                     'user_name': f"{me.first_name} {me.last_name or ''}".strip(),
                     'username': me.username,
                     'phone': me.phone,
-                    'login_time': datetime.now().isoformat()
+                    'login_time': get_current_timestamp()
                 }
                 logger.info(f"Loaded session data for user: {self.session_data['user_name']}")
         except Exception as e:
             logger.error(f"Failed to load session data: {e}")
-            self.session_data = {'user_name': 'Unknown', 'login_time': datetime.now().isoformat()}
+            self.session_data = {'user_name': 'Unknown', 'login_time': get_current_timestamp()}
     
     async def _load_monitored_channels(self):
         """Load monitored channels from database"""
@@ -233,7 +232,7 @@ class NewsReaderApp:
         
         # Create task instances
         self.cli_task_instance = TextualCLITask(self)
-        self.monitoring_task_instance = MonitoringTask(self.client, self.monitored_channels, self.cli_task_instance)
+        self.monitoring_task_instance = MonitoringTask(self.client, self.monitored_channels)
         
         # Start background tasks
         self.monitoring_task = asyncio.create_task(self.monitoring_task_instance.start())

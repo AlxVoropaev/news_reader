@@ -10,6 +10,8 @@ You are a text classifier. Analyze the given post message and classify it into e
 - VLMs (Vision Language Models) - any content about multimodal AI, computer vision combined with language models
 - OpenAI news - announcements, updates, research, or discussions about OpenAI and their products (ChatGPT, GPT models, DALL-E, etc.)
 - Autonomous driving - self-driving cars, autonomous vehicles, related AI/ML technologies for transportation
+- Interviews of famous people or industry leaders about technology, AI, OpenAI, autonomous driving, or VLMs
+- Events like conferences, meetups etc.
 
 **REST** - All other posts that don't fit the above categories, including:
 - General tech news not related to the specific topics above
